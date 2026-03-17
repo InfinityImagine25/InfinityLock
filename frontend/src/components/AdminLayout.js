@@ -27,6 +27,7 @@ import {
     ShieldCheck,
     FileText,
     UserCog,
+    KeyRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -126,6 +127,18 @@ export default function AdminLayout() {
                             <p className="text-sm font-medium">{user?.email}</p>
                             <p className="text-xs text-slate-500">{user?.role}</p>
                         </div>
+                        <DropdownMenuSeparator className="bg-white/10" />
+                        <DropdownMenuItem 
+                            onClick={() => {
+                                setMobileOpen(false);
+                                navigate('/profile');
+                            }}
+                            className="cursor-pointer"
+                            data-testid="profile-btn"
+                        >
+                            <KeyRound className="w-4 h-4 mr-2" />
+                            Account Settings
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator className="bg-white/10" />
                         <DropdownMenuItem 
                             onClick={handleLogout}

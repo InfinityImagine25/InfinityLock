@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from 'react';
 import { analyticsAPI, usersAPI } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +16,7 @@ import {
     DollarSign,
     Activity,
     Smartphone,
+    Lock,
 } from 'lucide-react';
 import {
     LineChart,
@@ -83,6 +85,7 @@ function ChartCard({ title, children, className = '' }) {
 }
 
 export default function DashboardPage() {
+    const { isSuperAdmin } = useAuth();
     const [stats, setStats] = useState(null);
     const [trend, setTrend] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -163,13 +166,31 @@ export default function DashboardPage() {
                     color="warning"
                     subtitle={`${stats?.premium_conversion_rate || 0}% conversion`}
                 />
-                <StatCard
-                    title="Monthly Revenue"
-                    value={`₹${(stats?.monthly_revenue || 0).toLocaleString()}`}
-                    icon={DollarSign}
-                    color="success"
-                    subtitle={`₹${(stats?.total_revenue || 0).toLocaleString()} total`}
-                />
+                {/* Revenue Card - Super Admin Only */}
+                {isSuperAdmin ? (
+                    <StatCard
+                        title="Monthly Revenue"
+                        value={`₹${(stats?.monthly_revenue || 0).toLocaleString()}`}
+                        icon={DollarSign}
+                        color="success"
+                        subtitle={`₹${(stats?.total_revenue || 0).toLocaleString()} total`}
+                    />
+                ) : (
+                    <Card className="bg-card/50 backdrop-blur-md border-white/5 hover:border-white/10 transition-colors">
+                        <CardContent className="p-6">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm text-slate-400 mb-1">Monthly Revenue</p>
+                                    <p className="text-lg text-slate-500">Restricted</p>
+                                    <p className="text-xs text-slate-600 mt-1">Super Admin access only</p>
+                                </div>
+                                <div className="w-12 h-12 rounded-xl bg-slate-500/10 flex items-center justify-center">
+                                    <Lock className="w-6 h-6 text-slate-500" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
 
             {/* Charts Row */}
@@ -314,26 +335,33 @@ export default function DashboardPage() {
                             <h3 className="font-medium">Revenue</h3>
                             <DollarSign className="w-5 h-5 text-amber-500" />
                         </div>
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-slate-400">Monthly</span>
-                                <span className="font-mono font-medium text-emerald-500">
-                                    ₹{(stats?.monthly_revenue || 0).toLocaleString()}
-                                </span>
+                        {isSuperAdmin ? (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-400">Monthly</span>
+                                    <span className="font-mono font-medium text-emerald-500">
+                                        ₹{(stats?.monthly_revenue || 0).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-400">Projected Annual</span>
+                                    <span className="font-mono font-medium">
+                                        ₹{((stats?.monthly_revenue || 0) * 12).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-400">Total Earned</span>
+                                    <span className="font-mono font-medium text-primary">
+                                        ₹{(stats?.total_revenue || 0).toLocaleString()}
+                                    </span>
+                                </div>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-slate-400">Projected Annual</span>
-                                <span className="font-mono font-medium">
-                                    ₹{((stats?.monthly_revenue || 0) * 12).toLocaleString()}
-                                </span>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-4 text-center">
+                                <Lock className="w-8 h-8 text-slate-500 mb-2" />
+                                <p className="text-sm text-slate-500">Super Admin access only</p>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-slate-400">Total Earned</span>
-                                <span className="font-mono font-medium text-primary">
-                                    ₹{(stats?.total_revenue || 0).toLocaleString()}
-                                </span>
-                            </div>
-                        </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

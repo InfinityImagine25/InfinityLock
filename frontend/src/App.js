@@ -18,6 +18,7 @@ import SystemHealthPage from '@/pages/SystemHealthPage';
 import SecurityLogsPage from '@/pages/SecurityLogsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminsPage from '@/pages/AdminsPage';
+import ProfilePage from '@/pages/ProfilePage';
 
 // Protected Route Component
 function ProtectedRoute({ children, requireSuperAdmin = false }) {
@@ -91,6 +92,7 @@ function AppRoutes() {
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/system" element={<SystemHealthPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
                 
                 {/* Super Admin Only */}
                 <Route

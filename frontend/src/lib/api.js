@@ -50,6 +50,9 @@ export const authAPI = {
     enableTotp: (totp_code) =>
         api.post(`/auth/enable-totp?totp_code=${totp_code}`),
     
+    changePassword: (current_password, new_password) =>
+        api.post(`/auth/change-password?current_password=${encodeURIComponent(current_password)}&new_password=${encodeURIComponent(new_password)}`),
+    
     getCurrentUser: () =>
         api.get('/auth/me'),
 };

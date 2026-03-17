@@ -304,6 +304,45 @@ async def enable_totp(totp_code: str, admin: dict = Depends(get_current_admin)):
     return {"message": "TOTP enabled successfully"}
 
 
+@auth_router.post("/change-password")
+async def change_password(
+    current_password: str,
+    new_password: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Change password for current admin"""
+    # Verify current password
+    if not verify_password(current_password, admin["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Validate new password
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    
+    if current_password == new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    
+    # Hash and update
+    new_hash = hash_password(new_password)
+    await db.admin_users.update_one(
+        {"email": admin["email"]},
+        {
+            "$set": {
+                "password_hash": new_hash,
+                "password_changed_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    await log_security_event(
+        "PASSWORD_CHANGED",
+        admin_id=admin["id"],
+        details={"email": admin["email"]}
+    )
+    
+    return {"message": "Password changed successfully"}
+
+
 @auth_router.get("/me", response_model=AdminUserResponse)
 async def get_current_admin_info(admin: dict = Depends(get_current_admin)):
     """Get current admin user information"""
@@ -395,15 +434,15 @@ async def list_app_users(
     skip: int = 0, 
     limit: int = 50,
     plan: Optional[str] = None,
-    status: Optional[str] = None,
+    status_filter: Optional[str] = None,
     admin: dict = Depends(require_admin_or_super)
 ):
     """List mobile app users with pagination and filters"""
     query = {}
     if plan:
         query["plan"] = plan
-    if status:
-        query["status"] = status
+    if status_filter:
+        query["status"] = status_filter
     
     users = await db.app_users.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
     
@@ -623,15 +662,15 @@ async def get_installation_trend(days: int = 30, admin: dict = Depends(require_a
 
 @feedback_router.get("/list", response_model=List[FeedbackResponse])
 async def list_feedback(
-    status: Optional[str] = None,
+    status_filter: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
     admin: dict = Depends(require_admin_or_super)
 ):
     """List user feedback with optional filtering"""
     query = {}
-    if status:
-        query["status"] = status
+    if status_filter:
+        query["status"] = status_filter
     
     feedback_list = await db.feedback.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     

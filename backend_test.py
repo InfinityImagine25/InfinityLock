@@ -22,6 +22,10 @@ class InfinityLockAPITester:
             "password": "TUXUu^MYanPHur8jdp@#",
             "totp_secret": "7TXXVVW6EEPCTGCWOJBG33BMG3ZEF5IU"
         }
+        self.regular_admin_creds = {
+            "email": "admin@infinitylock.com",
+            "password": "SecureAdmin123!"
+        }
         self.test_results = {
             "passed": [],
             "failed": [],
@@ -49,7 +53,7 @@ class InfinityLockAPITester:
         return totp.now()
 
     def make_request(self, method: str, endpoint: str, data: Dict = None, 
-                    headers: Dict = None, require_auth: bool = True) -> requests.Response:
+                    headers: Dict = None, require_auth: bool = True, params_as_query: bool = False) -> requests.Response:
         """Make API request with proper headers"""
         url = f"{self.base_url}/api{endpoint}"
         
@@ -63,7 +67,10 @@ class InfinityLockAPITester:
         if method.upper() == "GET":
             return self.session.get(url, headers=request_headers, params=data or {})
         elif method.upper() == "POST":
-            return self.session.post(url, headers=request_headers, json=data or {})
+            if params_as_query:
+                return self.session.post(url, headers=request_headers, params=data or {})
+            else:
+                return self.session.post(url, headers=request_headers, json=data or {})
         elif method.upper() == "PUT":
             return self.session.put(url, headers=request_headers, json=data or {})
         else:
@@ -282,6 +289,203 @@ class InfinityLockAPITester:
         except Exception as e:
             self.log_test("User Counts", False, str(e))
 
+    def test_password_change_validations(self):
+        """Test /api/auth/change-password endpoint validation"""
+        try:
+            # Test with wrong current password
+            wrong_password_params = {
+                "current_password": "wrongpassword",
+                "new_password": "NewSecure123!"
+            }
+            response = self.make_request("POST", "/auth/change-password", data=wrong_password_params, params_as_query=True)
+            
+            if response.status_code == 400 and "incorrect" in response.text.lower():
+                self.log_test("Password Change - Wrong Current Password", True, "Correctly rejected wrong password")
+            else:
+                self.log_test("Password Change - Wrong Current Password", False, f"Expected 400 with 'incorrect', got {response.status_code}: {response.text}")
+
+            # Test with short new password
+            short_password_params = {
+                "current_password": self.super_admin_creds["password"],
+                "new_password": "123"
+            }
+            response = self.make_request("POST", "/auth/change-password", data=short_password_params, params_as_query=True)
+            
+            if response.status_code == 400 and "8 characters" in response.text:
+                self.log_test("Password Change - Short Password", True, "Correctly rejected short password")
+            else:
+                self.log_test("Password Change - Short Password", False, f"Expected 400 with '8 characters', got {response.status_code}: {response.text}")
+
+            # Test with same password
+            same_password_params = {
+                "current_password": self.super_admin_creds["password"],
+                "new_password": self.super_admin_creds["password"]
+            }
+            response = self.make_request("POST", "/auth/change-password", data=same_password_params, params_as_query=True)
+            
+            if response.status_code == 400 and "different" in response.text.lower():
+                self.log_test("Password Change - Same Password", True, "Correctly rejected same password")
+            else:
+                self.log_test("Password Change - Same Password", False, f"Expected 400 with 'different', got {response.status_code}: {response.text}")
+
+        except Exception as e:
+            self.log_test("Password Change Validations", False, str(e))
+
+    def test_admin_creation(self):
+        """Test /api/admin/create endpoint (Super Admin only)"""
+        try:
+            # Test creating a new admin
+            timestamp = datetime.now().strftime("%H%M%S")
+            admin_data = {
+                "email": f"testadmin{timestamp}@test.com",
+                "password": "TestAdmin123!",
+                "role": "admin",
+                "status": "active"
+            }
+            
+            response = self.make_request("POST", "/admin/create", data=admin_data)
+            
+            if response.status_code == 200:
+                admin = response.json()
+                required_fields = ["id", "email", "role", "status", "totp_enabled"]
+                missing_fields = [field for field in required_fields if field not in admin]
+                
+                if missing_fields:
+                    self.log_test("Admin Creation", False, f"Missing fields in response: {missing_fields}")
+                else:
+                    self.log_test("Admin Creation", True, f"Created admin: {admin.get('email')} with role: {admin.get('role')}")
+                    
+                    # Store the created admin ID for cleanup or further testing
+                    self.created_admin_id = admin.get('id')
+            else:
+                self.log_test("Admin Creation", False, f"HTTP {response.status_code}: {response.text}")
+
+            # Test creating admin with duplicate email
+            duplicate_response = self.make_request("POST", "/admin/create", data=admin_data)
+            if duplicate_response.status_code == 400 and "already registered" in duplicate_response.text:
+                self.log_test("Admin Creation - Duplicate Email", True, "Correctly rejected duplicate email")
+            else:
+                self.log_test("Admin Creation - Duplicate Email", False, f"Expected 400 with 'already registered', got {duplicate_response.status_code}")
+
+            # Test creating super admin (should fail)
+            super_admin_data = {
+                "email": f"superadmin{timestamp}@test.com",
+                "password": "TestAdmin123!",
+                "role": "super_admin",
+                "status": "active"
+            }
+            super_response = self.make_request("POST", "/admin/create", data=super_admin_data)
+            if super_response.status_code == 403 and "cannot create" in super_response.text.lower():
+                self.log_test("Admin Creation - Super Admin Rejection", True, "Correctly rejected super_admin creation")
+            else:
+                self.log_test("Admin Creation - Super Admin Rejection", False, f"Expected 403, got {super_response.status_code}")
+
+        except Exception as e:
+            self.log_test("Admin Creation", False, str(e))
+
+    def test_regular_admin_login(self) -> Optional[str]:
+        """Test login with regular admin (no TOTP required)"""
+        try:
+            login_data = {
+                "email": self.regular_admin_creds["email"],
+                "password": self.regular_admin_creds["password"]
+            }
+            response = self.make_request("POST", "/auth/login", data=login_data, require_auth=False)
+            
+            if response.status_code != 200:
+                self.log_test("Regular Admin Login", False, f"HTTP {response.status_code}: {response.text}")
+                return None
+            
+            login_result = response.json()
+            access_token = login_result.get("access_token")
+            
+            if not access_token:
+                self.log_test("Regular Admin Login", False, "No access_token received")
+                return None
+            
+            if login_result.get("requires_totp", False):
+                self.log_test("Regular Admin Login", False, "Unexpected TOTP requirement for regular admin")
+                return None
+            
+            self.log_test("Regular Admin Login", True, f"Role: {login_result.get('role')}")
+            return access_token
+
+        except Exception as e:
+            self.log_test("Regular Admin Login", False, str(e))
+            return None
+
+    def test_role_based_access(self):
+        """Test role-based access restrictions"""
+        # Save current super admin token
+        super_admin_token = self.access_token
+        
+        # Login as regular admin
+        regular_admin_token = self.test_regular_admin_login()
+        
+        if regular_admin_token:
+            # Test regular admin access to dashboard (should work)
+            self.access_token = regular_admin_token
+            try:
+                response = self.make_request("GET", "/analytics/dashboard")
+                if response.status_code == 200:
+                    data = response.json()
+                    # Check if revenue fields are present (should be for API, frontend handles hiding)
+                    if "monthly_revenue" in data and "total_revenue" in data:
+                        self.log_test("Regular Admin - Dashboard Access", True, "Can access dashboard with revenue data")
+                    else:
+                        self.log_test("Regular Admin - Dashboard Access", False, "Missing revenue fields in dashboard response")
+                else:
+                    self.log_test("Regular Admin - Dashboard Access", False, f"HTTP {response.status_code}: {response.text}")
+            except Exception as e:
+                self.log_test("Regular Admin - Dashboard Access", False, str(e))
+            
+            # Test regular admin access to super admin endpoints (should fail)
+            try:
+                response = self.make_request("GET", "/security-logs")
+                if response.status_code == 403:
+                    self.log_test("Regular Admin - Security Logs Restriction", True, "Correctly blocked from security logs")
+                else:
+                    self.log_test("Regular Admin - Security Logs Restriction", False, f"Expected 403, got {response.status_code}")
+            except Exception as e:
+                self.log_test("Regular Admin - Security Logs Restriction", False, str(e))
+            
+            # Test regular admin access to admin creation (should fail)
+            try:
+                test_admin_data = {
+                    "email": "test@test.com",
+                    "password": "TestPass123!",
+                    "role": "admin",
+                    "status": "active"
+                }
+                response = self.make_request("POST", "/admin/create", data=test_admin_data)
+                if response.status_code == 403:
+                    self.log_test("Regular Admin - Admin Creation Restriction", True, "Correctly blocked from creating admins")
+                else:
+                    self.log_test("Regular Admin - Admin Creation Restriction", False, f"Expected 403, got {response.status_code}")
+            except Exception as e:
+                self.log_test("Regular Admin - Admin Creation Restriction", False, str(e))
+        
+    def test_admin_list(self):
+        """Test /api/admin/list endpoint (Super Admin only)"""
+        try:
+            response = self.make_request("GET", "/admin/list")
+            
+            if response.status_code == 200:
+                admins = response.json()
+                if isinstance(admins, list):
+                    # Check if the list contains at least the super admin
+                    super_admin_found = any(admin.get("role") == "super_admin" for admin in admins)
+                    if super_admin_found:
+                        self.log_test("Admin List", True, f"Found {len(admins)} admins including super admin")
+                    else:
+                        self.log_test("Admin List", False, "Super admin not found in admin list")
+                else:
+                    self.log_test("Admin List", False, "Response is not a list")
+            else:
+                self.log_test("Admin List", False, f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_test("Admin List", False, str(e))
+
     def run_all_tests(self):
         """Run all API tests"""
         print("=" * 60)
@@ -312,9 +516,19 @@ class InfinityLockAPITester:
         self.test_feedback_list()
         self.test_settings()
         
-        # Test 4: Super Admin only endpoints
+        # Test 4: Password change validations
+        print("\n--- Testing Password Change API ---")
+        self.test_password_change_validations()
+        
+        # Test 5: Super Admin only endpoints
         print("\n--- Testing Super Admin Only Endpoints ---")
         self.test_security_logs()
+        self.test_admin_creation()
+        self.test_admin_list()
+        
+        # Test 6: Role-based access control
+        print("\n--- Testing Role-Based Access Control ---")
+        self.test_role_based_access()
 
         self.print_summary()
         return True

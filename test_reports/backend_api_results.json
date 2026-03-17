@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-17T11:21:36.002480",
+  "timestamp": "2026-03-17T12:28:14.385423",
   "base_url": "https://rbac-deploy-2.preview.emergentagent.com",
   "test_results": {
     "passed": [
@@ -13,11 +13,22 @@
       "\u2705 System Health",
       "\u2705 Feedback List",
       "\u2705 Settings",
-      "\u2705 Security Logs"
+      "\u2705 Password Change - Wrong Current Password",
+      "\u2705 Password Change - Short Password",
+      "\u2705 Password Change - Same Password",
+      "\u2705 Security Logs",
+      "\u2705 Admin Creation",
+      "\u2705 Admin Creation - Duplicate Email",
+      "\u2705 Admin Creation - Super Admin Rejection",
+      "\u2705 Admin List",
+      "\u2705 Regular Admin Login",
+      "\u2705 Regular Admin - Dashboard Access",
+      "\u2705 Regular Admin - Security Logs Restriction",
+      "\u2705 Regular Admin - Admin Creation Restriction"
     ],
     "failed": [],
-    "total_tests": 11,
-    "passed_count": 11
+    "total_tests": 22,
+    "passed_count": 22
   },
   "success_rate": 100.0
 }
