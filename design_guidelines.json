@@ -1,0 +1,142 @@
+{
+  "project_name": "Infinity Lock Admin Panel",
+  "version": "1.0",
+  "design_philosophy": {
+    "identity": "Cyber-Physical Command Center",
+    "core_principles": [
+      "Darkness is the Canvas: Use deep obsidian backgrounds, never pure black.",
+      "Data is Light: Information glows against the dark. Use color to signal status, not decoration.",
+      "Glass & Steel: Surfaces should feel like smoked glass (blur) or matte metal (noise).",
+      "Dense & Direct: Admins need density. Use the 'Bento' grid system to maximize screen real estate."
+    ],
+    "mood": "Secure, Precise, authoritative, Electric"
+  },
+  "typography": {
+    "font_imports": [
+      "https://fonts.googleapis.com/css2?family=Chivo:wght@300;400;700;900&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    ],
+    "families": {
+      "heading": "Chivo, sans-serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "rules": {
+      "headings": "Uppercase letter-spacing (tracking-tight) for H1/H2. Font-weight: 700 or 900.",
+      "body": "High readability. Use text-slate-300 for secondary text, text-white for primary.",
+      "numbers": "Use JetBrains Mono for all IDs, IPs, timestamps, and financial metrics."
+    }
+  },
+  "colors": {
+    "theme_mode": "dark",
+    "css_variables": {
+      "root": {
+        "--background": "240 10% 4%",
+        "--foreground": "0 0% 98%",
+        "--card": "240 10% 6%",
+        "--card-foreground": "0 0% 98%",
+        "--popover": "240 10% 6%",
+        "--popover-foreground": "0 0% 98%",
+        "--primary": "217 91% 60%",
+        "--primary-foreground": "0 0% 100%",
+        "--secondary": "240 4% 16%",
+        "--secondary-foreground": "0 0% 98%",
+        "--muted": "240 4% 16%",
+        "--muted-foreground": "240 5% 65%",
+        "--accent": "217 91% 60%",
+        "--accent-foreground": "0 0% 100%",
+        "--destructive": "0 84% 60%",
+        "--destructive-foreground": "0 0% 100%",
+        "--border": "240 4% 16%",
+        "--input": "240 4% 16%",
+        "--ring": "217 91% 60%",
+        "--radius": "0.5rem"
+      }
+    },
+    "palette": {
+      "bg_main": "#0A0A0B",
+      "bg_card": "#101012",
+      "primary_blue": "#3B82F6",
+      "signal_red": "#EF4444",
+      "warning_amber": "#F59E0B",
+      "success_emerald": "#10B981"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "bg-black/40 backdrop-blur-xl border border-white/10",
+    "gradients": "No full screen gradients. Use subtle radial-gradients for 'glow' effects behind cards.",
+    "borders": "1px solid border-white/5. Active elements get border-primary/50.",
+    "shadows": "shadow-[0_8px_32px_rgba(0,0,0,0.5)] for floating panels."
+  },
+  "layout_system": {
+    "grid_strategy": "Bento Grid Mode B (High Density)",
+    "spacing": "Compact. p-4 or p-6 for cards. gap-4 for grids.",
+    "sidebar": "Fixed width (260px). Darker than main content (bg-[#050505]). Border-right: 1px solid border-white/5.",
+    "container": "max-w-[1600px] mx-auto p-6"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary hover:bg-primary/90 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-all active:scale-95",
+      "secondary": "bg-secondary hover:bg-secondary/80 text-white border border-white/10",
+      "ghost": "hover:bg-white/5 text-slate-300 hover:text-white"
+    },
+    "cards": {
+      "style": "bg-card/50 backdrop-blur-md border border-white/5 rounded-xl hover:border-white/10 transition-colors",
+      "header": "border-b border-white/5 p-4",
+      "content": "p-4"
+    },
+    "inputs": {
+      "style": "bg-black/20 border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-slate-600"
+    },
+    "charts": {
+      "library": "recharts",
+      "colors": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"]
+    }
+  },
+  "page_specifics": {
+    "login": {
+      "layout": "Split screen. Left: Abstract security visual. Right: Glass login form.",
+      "elements": "TOTP input must be prominent. Use 'InputOTP' component."
+    },
+    "dashboard": {
+      "layout": "Bento Grid. Hero card: Total Installations (Line Chart). Sub-cards: Active Users (Number), Revenue (Bar Chart).",
+      "widgets": "World Map for 'Country Distribution'. Donut chart for 'Plan Distribution'."
+    },
+    "user_management": {
+      "layout": "Full-width data table.",
+      "table_style": "Striped rows (even: bg-white/2). Compact headers. Status badges (pill shaped)."
+    },
+    "feature_analytics": {
+      "layout": "Grid of 4 charts. 1. Secure Apps (Bar), 2. Biometric (Pie), 3. Language (List), 4. Time Trends (Area)."
+    }
+  },
+  "assets": {
+    "images": {
+      "login_bg": "https://images.unsplash.com/photo-1759661881353-5b9cc55e1cf4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGN5YmVyJTIwc2VjdXJpdHklMjBuZXR3b3JrJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzczNzQ1Njc1fDA&ixlib=rb-4.1.0&q=85",
+      "logo_placeholder": "https://via.placeholder.com/150/3B82F6/FFFFFF?text=InfinityLock"
+    },
+    "icons": "Use lucide-react. Examples: ShieldCheck, Users, Activity, Lock, Globe, CreditCard."
+  },
+  "instructions_to_main_agent": [
+    "1. INSTALLATION: Run `npm install framer-motion` (or yarn add). Use it for subtle page transitions.",
+    "2. SETUP: Update `tailwind.config.js` to include the custom colors and font families defined above.",
+    "3. GLOBAL CSS: Copy the CSS variables into `src/index.css` inside the `@layer base { :root { ... } }` and `.dark { ... }` blocks.",
+    "4. ROUTING: Ensure react-router-dom is set up with a layout wrapper that includes the Sidebar.",
+    "5. AUTH: Mock the Login flow. If email='admin@infinity.com' & password='admin' -> show OTP screen -> Any 6 digits -> Success.",
+    "6. MOCKED DATA: Create a `src/lib/mockData.js` file to populate charts and tables. Do not leave them empty."
+  ],
+  "universal_guidelines": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: `transition: all`. This results in breaking transforms.",
+    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER use AI assistant Emoji characters like 🤖 etc.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use `sonner` for toasts"
+  ]
+}
