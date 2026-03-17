@@ -1,34 +1,83 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
+/* Infinity Lock Admin Panel Styles */
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+/* Remove default styles that could interfere */
+.App {
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
 }
 
-.App-link {
-    color: #61dafb;
+/* Custom animations */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.animate-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Focus styles */
+*:focus-visible {
+    outline: 2px solid hsl(217 91% 60%);
+    outline-offset: 2px;
+}
+
+/* Selection color */
+::selection {
+    background: hsl(217 91% 60% / 0.3);
+    color: inherit;
+}
+
+/* Table row hover effect */
+.hover\:bg-white\/2:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Card hover animation */
+.card-hover {
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.card-hover:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Button press effect */
+button:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+/* Input autofill styling */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #fff;
+    -webkit-box-shadow: 0 0 0px 1000px #101012 inset;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Recharts tooltip customization */
+.recharts-tooltip-wrapper {
+    z-index: 100;
+}
+
+/* Progress bar animation */
+.progress-animate > div {
+    transition: width 0.5s ease-out;
+}
+
+/* Badge pill style */
+.badge-pill {
+    border-radius: 9999px;
 }
