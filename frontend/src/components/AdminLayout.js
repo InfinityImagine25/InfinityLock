@@ -26,6 +26,7 @@ import {
     User,
     ShieldCheck,
     FileText,
+    UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +36,7 @@ const navItems = [
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/feedback', label: 'Feedback', icon: MessageSquare },
     { path: '/system', label: 'System Health', icon: Activity },
+    { path: '/admins', label: 'Admins', icon: UserCog, superAdminOnly: true },
     { path: '/security-logs', label: 'Security Logs', icon: FileText, superAdminOnly: true },
     { path: '/settings', label: 'Settings', icon: Settings },
 ];
