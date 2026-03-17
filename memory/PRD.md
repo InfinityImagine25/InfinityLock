@@ -62,6 +62,9 @@ Build a complete Web Admin Panel for "Infinity Lock" app-lock application with:
 | Responsive sidebar | ✅ Complete | 2026-03-17 |
 | Admin management page | ✅ Complete | 2026-03-17 |
 | Create Admin dialog | ✅ Complete | 2026-03-17 |
+| Profile/Account Settings | ✅ Complete | 2026-03-17 |
+| Password change UI | ✅ Complete | 2026-03-17 |
+| Revenue restriction (role-based) | ✅ Complete | 2026-03-17 |
 
 ### Documentation
 | Document | Status | Date |
@@ -114,7 +117,8 @@ Build a complete Web Admin Panel for "Infinity Lock" app-lock application with:
 
 ### P0 - Critical (Next Phase)
 - [x] Admin creation by Super Admin ✅ Completed
-- [ ] Password change functionality
+- [x] Password change functionality ✅ Completed
+- [x] Revenue visibility restriction for admins ✅ Completed
 - [ ] Email OTP integration (currently mocked)
 
 ### P1 - High Priority
