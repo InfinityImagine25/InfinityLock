@@ -1115,7 +1115,7 @@ async def get_notifications(
 
 @notifications_router.post("/mark-read")
 async def mark_notifications_read(
-    notification_ids: List[str] = None,
+    notification_ids: Optional[List[str]] = Query(None),
     admin: dict = Depends(require_super_admin)
 ):
     """Mark notifications as read"""
