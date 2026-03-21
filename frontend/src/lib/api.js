@@ -118,6 +118,42 @@ export const settingsAPI = {
 export const securityAPI = {
     getLogs: (params = {}) =>
         api.get('/security-logs', { params }),
+    
+    getLogsCount: (params = {}) =>
+        api.get('/security-logs/count', { params }),
+};
+
+// Export APIs (Super Admin only)
+export const exportAPI = {
+    downloadSecurityLogsCSV: () =>
+        api.get('/export/security-logs/csv', { responseType: 'blob' }),
+    
+    downloadIntrusionLogsCSV: () =>
+        api.get('/export/intrusion-logs/csv', { responseType: 'blob' }),
+    
+    downloadUsersCSV: () =>
+        api.get('/export/users/csv', { responseType: 'blob' }),
+};
+
+// Notifications APIs (Super Admin only)
+export const notificationsAPI = {
+    getNotifications: (params = {}) =>
+        api.get('/notifications/', { params }),
+    
+    markAsRead: (notification_ids = null) =>
+        api.post('/notifications/mark-read', notification_ids ? { notification_ids } : {}),
+    
+    // SSE stream URL
+    getStreamUrl: () => `${API_BASE}/notifications/stream`,
+};
+
+// Email OTP APIs
+export const otpAPI = {
+    sendOTP: (email, purpose = 'verification') =>
+        api.post(`/auth/send-otp?email=${encodeURIComponent(email)}&purpose=${purpose}`),
+    
+    verifyOTP: (email, otp_code) =>
+        api.post(`/auth/verify-email-otp?email=${encodeURIComponent(email)}&otp_code=${otp_code}`),
 };
 
 // Health check

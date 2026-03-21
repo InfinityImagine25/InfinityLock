@@ -486,6 +486,159 @@ class InfinityLockAPITester:
         except Exception as e:
             self.log_test("Admin List", False, str(e))
 
+    def test_email_otp_endpoints(self):
+        """Test Email OTP send and verify endpoints"""
+        try:
+            # Test send OTP
+            send_data = {
+                "email": "test@example.com",
+                "purpose": "verification"
+            }
+            response = self.make_request("POST", "/auth/send-otp", data=send_data, params_as_query=True, require_auth=False)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "message" in result and "expires_in_minutes" in result:
+                    self.log_test("Email OTP Send", True, f"Status: {result.get('status', 'unknown')}")
+                else:
+                    self.log_test("Email OTP Send", False, "Missing required fields in response")
+            else:
+                self.log_test("Email OTP Send", False, f"HTTP {response.status_code}: {response.text}")
+
+            # Test verify OTP with invalid code (should fail)
+            verify_data = {
+                "email": "test@example.com",
+                "otp_code": "123456"
+            }
+            response = self.make_request("POST", "/auth/verify-email-otp", data=verify_data, params_as_query=True, require_auth=False)
+            
+            if response.status_code == 400:
+                self.log_test("Email OTP Verify - Invalid Code", True, "Correctly rejected invalid OTP")
+            else:
+                self.log_test("Email OTP Verify - Invalid Code", False, f"Expected 400, got {response.status_code}")
+
+        except Exception as e:
+            self.log_test("Email OTP Endpoints", False, str(e))
+
+    def test_security_logs_pagination(self):
+        """Test Security Logs with pagination (25 per page)"""
+        try:
+            # Test with pagination parameters
+            params = {"skip": 0, "limit": 25}
+            response = self.make_request("GET", "/security-logs", data=params)
+            
+            if response.status_code == 200:
+                logs = response.json()
+                if isinstance(logs, list):
+                    if len(logs) <= 25:
+                        self.log_test("Security Logs Pagination", True, f"Returned {len(logs)} logs (≤25)")
+                    else:
+                        self.log_test("Security Logs Pagination", False, f"Returned {len(logs)} logs (>25)")
+                else:
+                    self.log_test("Security Logs Pagination", False, "Response is not a list")
+            else:
+                self.log_test("Security Logs Pagination", False, f"HTTP {response.status_code}: {response.text}")
+
+            # Test logs count endpoint
+            response = self.make_request("GET", "/security-logs/count")
+            if response.status_code == 200:
+                count_data = response.json()
+                if "total" in count_data:
+                    self.log_test("Security Logs Count", True, f"Total logs: {count_data['total']}")
+                else:
+                    self.log_test("Security Logs Count", False, "Missing 'total' field")
+            else:
+                self.log_test("Security Logs Count", False, f"HTTP {response.status_code}: {response.text}")
+
+        except Exception as e:
+            self.log_test("Security Logs Pagination", False, str(e))
+
+    def test_export_endpoints(self):
+        """Test CSV export endpoints (Super Admin only)"""
+        try:
+            # Test security logs CSV export
+            response = self.make_request("GET", "/export/security-logs/csv")
+            if response.status_code == 200:
+                if "text/csv" in response.headers.get("content-type", ""):
+                    self.log_test("Export Security Logs CSV", True, f"CSV size: {len(response.content)} bytes")
+                else:
+                    self.log_test("Export Security Logs CSV", False, "Response is not CSV format")
+            else:
+                self.log_test("Export Security Logs CSV", False, f"HTTP {response.status_code}: {response.text}")
+
+            # Test intrusion logs CSV export
+            response = self.make_request("GET", "/export/intrusion-logs/csv")
+            if response.status_code == 200:
+                if "text/csv" in response.headers.get("content-type", ""):
+                    self.log_test("Export Intrusion Logs CSV", True, f"CSV size: {len(response.content)} bytes")
+                else:
+                    self.log_test("Export Intrusion Logs CSV", False, "Response is not CSV format")
+            else:
+                self.log_test("Export Intrusion Logs CSV", False, f"HTTP {response.status_code}: {response.text}")
+
+            # Test users CSV export
+            response = self.make_request("GET", "/export/users/csv")
+            if response.status_code == 200:
+                if "text/csv" in response.headers.get("content-type", ""):
+                    self.log_test("Export Users CSV", True, f"CSV size: {len(response.content)} bytes")
+                else:
+                    self.log_test("Export Users CSV", False, "Response is not CSV format")
+            else:
+                self.log_test("Export Users CSV", False, f"HTTP {response.status_code}: {response.text}")
+
+        except Exception as e:
+            self.log_test("Export Endpoints", False, str(e))
+
+    def test_notifications_endpoints(self):
+        """Test notifications endpoints (Super Admin only)"""
+        try:
+            # Test get notifications
+            response = self.make_request("GET", "/notifications/")
+            if response.status_code == 200:
+                data = response.json()
+                if "notifications" in data and "unread_count" in data:
+                    self.log_test("Notifications List", True, f"Unread count: {data['unread_count']}")
+                else:
+                    self.log_test("Notifications List", False, "Missing required fields")
+            else:
+                self.log_test("Notifications List", False, f"HTTP {response.status_code}: {response.text}")
+
+            # Test mark notifications as read
+            response = self.make_request("POST", "/notifications/mark-read", data=[])
+            if response.status_code == 200:
+                result = response.json()
+                if "message" in result:
+                    self.log_test("Mark Notifications Read", True, result["message"])
+                else:
+                    self.log_test("Mark Notifications Read", False, "Missing message field")
+            else:
+                self.log_test("Mark Notifications Read", False, f"HTTP {response.status_code}: {response.text}")
+
+        except Exception as e:
+            self.log_test("Notifications Endpoints", False, str(e))
+
+    def test_users_pagination(self):
+        """Test Users list with pagination (25 per page)"""
+        try:
+            # Test with pagination parameters
+            params = {"skip": 0, "limit": 25}
+            response = self.make_request("GET", "/users/list", data=params)
+            
+            if response.status_code == 200:
+                users = response.json()
+                if isinstance(users, list):
+                    if len(users) <= 25:
+                        self.log_test("Users Pagination", True, f"Returned {len(users)} users (≤25)")
+                    else:
+                        self.log_test("Users Pagination", False, f"Returned {len(users)} users (>25)")
+                else:
+                    self.log_test("Users Pagination", False, "Response is not a list")
+            else:
+                self.log_test("Users Pagination", False, f"HTTP {response.status_code}: {response.text}")
+
+        except Exception as e:
+            self.log_test("Users Pagination", False, str(e))
+
     def run_all_tests(self):
         """Run all API tests"""
         print("=" * 60)
@@ -523,10 +676,21 @@ class InfinityLockAPITester:
         # Test 5: Super Admin only endpoints
         print("\n--- Testing Super Admin Only Endpoints ---")
         self.test_security_logs()
+        self.test_security_logs_pagination()
         self.test_admin_creation()
         self.test_admin_list()
+        self.test_export_endpoints()
+        self.test_notifications_endpoints()
         
-        # Test 6: Role-based access control
+        # Test 6: Email OTP functionality
+        print("\n--- Testing Email OTP Endpoints ---")
+        self.test_email_otp_endpoints()
+        
+        # Test 7: Pagination features
+        print("\n--- Testing Pagination Features ---")
+        self.test_users_pagination()
+        
+        # Test 8: Role-based access control
         print("\n--- Testing Role-Based Access Control ---")
         self.test_role_based_access()
 

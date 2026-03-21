@@ -30,6 +30,7 @@ import {
     KeyRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import NotificationsBell from '@/components/NotificationsBell';
 
 const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -199,6 +200,11 @@ export default function AdminLayout() {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+                {/* Desktop Header with Notifications */}
+                <header className="hidden lg:flex items-center justify-end p-4 border-b border-white/5 bg-[#050505]/50">
+                    <NotificationsBell />
+                </header>
+
                 {/* Mobile Header */}
                 <header className="lg:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#050505]">
                     <Button
@@ -213,7 +219,7 @@ export default function AdminLayout() {
                         <Shield className="w-5 h-5 text-primary" />
                         <span className="font-heading font-bold text-sm">INFINITY LOCK</span>
                     </div>
-                    <div className="w-10" />
+                    <NotificationsBell />
                 </header>
 
                 {/* Page Content */}

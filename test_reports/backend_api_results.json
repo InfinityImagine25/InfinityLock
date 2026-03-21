@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-17T12:28:14.385423",
+  "timestamp": "2026-03-21T18:47:41.311001",
   "base_url": "https://rbac-deploy-2.preview.emergentagent.com",
   "test_results": {
     "passed": [
@@ -17,18 +17,29 @@
       "\u2705 Password Change - Short Password",
       "\u2705 Password Change - Same Password",
       "\u2705 Security Logs",
+      "\u2705 Security Logs Pagination",
+      "\u2705 Security Logs Count",
       "\u2705 Admin Creation",
       "\u2705 Admin Creation - Duplicate Email",
       "\u2705 Admin Creation - Super Admin Rejection",
       "\u2705 Admin List",
+      "\u2705 Export Security Logs CSV",
+      "\u2705 Export Intrusion Logs CSV",
+      "\u2705 Export Users CSV",
+      "\u2705 Notifications List",
+      "\u2705 Email OTP Send",
+      "\u2705 Email OTP Verify - Invalid Code",
+      "\u2705 Users Pagination",
       "\u2705 Regular Admin Login",
       "\u2705 Regular Admin - Dashboard Access",
       "\u2705 Regular Admin - Security Logs Restriction",
       "\u2705 Regular Admin - Admin Creation Restriction"
     ],
-    "failed": [],
-    "total_tests": 22,
-    "passed_count": 22
+    "failed": [
+      "\u274c Mark Notifications Read: HTTP 422: {\"detail\":[{\"type\":\"list_type\",\"loc\":[\"body\"],\"msg\":\"Input should be a valid list\",\"input\":{},\"url\":\"https://errors.pydantic.dev/2.12/v/list_type\"}]}"
+    ],
+    "total_tests": 32,
+    "passed_count": 31
   },
-  "success_rate": 100.0
+  "success_rate": 96.875
 }

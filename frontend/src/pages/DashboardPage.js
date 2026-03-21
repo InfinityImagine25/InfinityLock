@@ -142,8 +142,8 @@ export default function DashboardPage() {
                 <p className="text-slate-400">Overview of Infinity Lock metrics and performance</p>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Stats Grid - Revenue ONLY visible to Super Admin */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
                 <StatCard
                     title="Total Installations"
                     value={stats?.total_installations?.toLocaleString() || 0}
@@ -166,8 +166,8 @@ export default function DashboardPage() {
                     color="warning"
                     subtitle={`${stats?.premium_conversion_rate || 0}% conversion`}
                 />
-                {/* Revenue Card - Super Admin Only */}
-                {isSuperAdmin ? (
+                {/* Revenue Card - EXCLUSIVELY Super Admin Only */}
+                {isSuperAdmin && (
                     <StatCard
                         title="Monthly Revenue"
                         value={`₹${(stats?.monthly_revenue || 0).toLocaleString()}`}
@@ -175,21 +175,6 @@ export default function DashboardPage() {
                         color="success"
                         subtitle={`₹${(stats?.total_revenue || 0).toLocaleString()} total`}
                     />
-                ) : (
-                    <Card className="bg-card/50 backdrop-blur-md border-white/5 hover:border-white/10 transition-colors">
-                        <CardContent className="p-6">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-sm text-slate-400 mb-1">Monthly Revenue</p>
-                                    <p className="text-lg text-slate-500">Restricted</p>
-                                    <p className="text-xs text-slate-600 mt-1">Super Admin access only</p>
-                                </div>
-                                <div className="w-12 h-12 rounded-xl bg-slate-500/10 flex items-center justify-center">
-                                    <Lock className="w-6 h-6 text-slate-500" />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
                 )}
             </div>
 
@@ -283,8 +268,8 @@ export default function DashboardPage() {
                 </ChartCard>
             </div>
 
-            {/* Additional Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Additional Stats - Revenue EXCLUSIVELY Super Admin Only */}
+            <div className={`grid grid-cols-1 ${isSuperAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
                 <Card className="bg-card/50 backdrop-blur-md border-white/5">
                     <CardContent className="p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -329,13 +314,14 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-card/50 backdrop-blur-md border-white/5">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-medium">Revenue</h3>
-                            <DollarSign className="w-5 h-5 text-amber-500" />
-                        </div>
-                        {isSuperAdmin ? (
+                {/* Revenue Card - EXCLUSIVELY Super Admin Only */}
+                {isSuperAdmin && (
+                    <Card className="bg-card/50 backdrop-blur-md border-white/5">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-medium">Revenue</h3>
+                                <DollarSign className="w-5 h-5 text-amber-500" />
+                            </div>
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-slate-400">Monthly</span>
@@ -356,14 +342,9 @@ export default function DashboardPage() {
                                     </span>
                                 </div>
                             </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center py-4 text-center">
-                                <Lock className="w-8 h-8 text-slate-500 mb-2" />
-                                <p className="text-sm text-slate-500">Super Admin access only</p>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </div>
     );

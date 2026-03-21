@@ -1,8 +1,10 @@
 /**
  * Users Management Page for Infinity Lock Admin Panel
+ * With Pagination (25 per page)
  */
 import { useState, useEffect, useCallback } from 'react';
-import { usersAPI } from '@/lib/api';
+import { usersAPI, exportAPI } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,8 +48,13 @@ import {
     Crown,
     RefreshCw,
     Loader2,
+    ChevronLeft,
+    ChevronRight,
+    Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const ITEMS_PER_PAGE = 25;
 
 const statusColors = {
     active: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -61,12 +68,16 @@ const planColors = {
 };
 
 export default function UsersPage() {
+    const { isSuperAdmin } = useAuth();
     const [users, setUsers] = useState([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [planFilter, setPlanFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
     
     // Action dialog state
     const [actionDialog, setActionDialog] = useState({
@@ -78,12 +89,19 @@ export default function UsersPage() {
 
     const fetchUsers = useCallback(async () => {
         try {
-            const params = {};
+            const params = {
+                skip: (currentPage - 1) * ITEMS_PER_PAGE,
+                limit: ITEMS_PER_PAGE,
+            };
             if (planFilter !== 'all') params.plan = planFilter;
             if (statusFilter !== 'all') params.status = statusFilter;
             
-            const response = await usersAPI.listUsers(params);
-            setUsers(response.data);
+            const [usersRes, countRes] = await Promise.all([
+                usersAPI.listUsers(params),
+                usersAPI.getUserCounts(),
+            ]);
+            setUsers(usersRes.data);
+            setTotalCount(countRes.data.total);
         } catch (error) {
             console.error('Failed to fetch users:', error);
             toast.error('Failed to load users');
@@ -91,7 +109,7 @@ export default function UsersPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [planFilter, statusFilter]);
+    }, [planFilter, statusFilter, currentPage]);
 
     useEffect(() => {
         fetchUsers();
@@ -100,6 +118,32 @@ export default function UsersPage() {
     const handleRefresh = () => {
         setRefreshing(true);
         fetchUsers();
+    };
+
+    const handleExportCSV = async () => {
+        if (!isSuperAdmin) {
+            toast.error('Export is available for Super Admin only');
+            return;
+        }
+        setExporting(true);
+        try {
+            const response = await exportAPI.downloadUsersCSV();
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `users_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            toast.success('Users exported successfully');
+        } catch (error) {
+            console.error('Export failed:', error);
+            toast.error('Failed to export users');
+        } finally {
+            setExporting(false);
+        }
     };
 
     const openActionDialog = (user, action) => {
@@ -133,6 +177,8 @@ export default function UsersPage() {
         );
     });
 
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+
     if (loading) {
         return (
             <div className="space-y-6 animate-fade-in" data-testid="users-loading">
@@ -153,16 +199,30 @@ export default function UsersPage() {
                     <h1 className="text-2xl font-heading font-bold tracking-tight">User Management</h1>
                     <p className="text-slate-400">Manage mobile app users and their accounts</p>
                 </div>
-                <Button
-                    variant="outline"
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className="border-white/10"
-                    data-testid="refresh-users-btn"
-                >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh
-                </Button>
+                <div className="flex gap-2">
+                    {isSuperAdmin && (
+                        <Button
+                            variant="outline"
+                            onClick={handleExportCSV}
+                            disabled={exporting}
+                            className="border-white/10"
+                            data-testid="export-users-btn"
+                        >
+                            <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} />
+                            Export CSV
+                        </Button>
+                    )}
+                    <Button
+                        variant="outline"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="border-white/10"
+                        data-testid="refresh-users-btn"
+                    >
+                        <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </Button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -329,6 +389,62 @@ export default function UsersPage() {
                             </TableBody>
                         </Table>
                     </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between p-4 border-t border-white/5">
+                            <p className="text-sm text-slate-500">
+                                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of {totalCount}
+                            </p>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="border-white/10"
+                                    data-testid="users-prev-page"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                        let pageNum;
+                                        if (totalPages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i;
+                                        } else {
+                                            pageNum = currentPage - 2 + i;
+                                        }
+                                        return (
+                                            <Button
+                                                key={pageNum}
+                                                variant={currentPage === pageNum ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => setCurrentPage(pageNum)}
+                                                className={currentPage === pageNum ? "" : "border-white/10"}
+                                            >
+                                                {pageNum}
+                                            </Button>
+                                        );
+                                    })}
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="border-white/10"
+                                    data-testid="users-next-page"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

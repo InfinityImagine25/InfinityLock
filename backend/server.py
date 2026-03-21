@@ -1,13 +1,18 @@
 """
 Infinity Lock Admin Panel - FastAPI Backend Server
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import json
+import csv
+import io
+import asyncio
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -30,6 +35,7 @@ from auth import (
     calculate_lockout, is_locked_out,
     generate_email_otp,
 )
+from email_service import send_otp_email, send_security_alert_email
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -50,9 +56,14 @@ users_router = APIRouter(prefix="/users", tags=["User Management"])
 analytics_router = APIRouter(prefix="/analytics", tags=["Analytics"])
 feedback_router = APIRouter(prefix="/feedback", tags=["Feedback"])
 settings_router = APIRouter(prefix="/settings", tags=["Settings"])
+notifications_router = APIRouter(prefix="/notifications", tags=["Notifications"])
+export_router = APIRouter(prefix="/export", tags=["Export"])
 
 # Security
 security = HTTPBearer()
+
+# Notification subscribers (in-memory for SSE)
+notification_subscribers = []
 
 # Configure logging
 logging.basicConfig(
@@ -103,7 +114,7 @@ async def require_admin_or_super(admin: dict = Depends(get_current_admin)) -> di
 
 async def log_security_event(event_type: str, admin_id: str = None, user_id: str = None, 
                             ip_address: str = None, details: dict = None):
-    """Log security event to database"""
+    """Log security event to database and broadcast notification for important events"""
     log_entry = SecurityLogInDB(
         event_type=event_type,
         admin_id=admin_id,
@@ -114,6 +125,27 @@ async def log_security_event(event_type: str, admin_id: str = None, user_id: str
     doc = log_entry.model_dump()
     doc['timestamp'] = doc['timestamp'].isoformat()
     await db.security_logs.insert_one(doc)
+    
+    # Broadcast real-time notification for important events
+    notify_events = {
+        "LOGIN_FAILED": {"type": "alert", "title": "Failed Login", "severity": "warning"},
+        "TOTP_VERIFICATION_FAILED": {"type": "alert", "title": "TOTP Failed", "severity": "warning"},
+        "USER_SUSPENDED": {"type": "action", "title": "User Suspended", "severity": "info"},
+        "ADMIN_CREATED": {"type": "action", "title": "New Admin Created", "severity": "info"},
+        "SETTINGS_UPDATED": {"type": "action", "title": "Settings Updated", "severity": "info"},
+    }
+    
+    if event_type in notify_events:
+        notification = {
+            **notify_events[event_type],
+            "event_type": event_type,
+            "details": details or {},
+            "timestamp": doc['timestamp'],
+        }
+        try:
+            await broadcast_notification(notification)
+        except Exception as e:
+            logger.warning(f"Failed to broadcast notification: {e}")
 
 
 # ==================== Auth Routes ====================
@@ -341,6 +373,71 @@ async def change_password(
     )
     
     return {"message": "Password changed successfully"}
+
+
+@auth_router.post("/send-otp")
+async def send_email_otp(email: str, purpose: str = "verification"):
+    """Send OTP to email for verification"""
+    # Generate OTP
+    otp_code, expires_at = generate_email_otp()
+    
+    # Store OTP in database
+    await db.email_otps.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "otp": otp_code,
+                "expires_at": expires_at.isoformat(),
+                "purpose": purpose,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        upsert=True
+    )
+    
+    # Send email via Resend
+    result = await send_otp_email(email, otp_code, purpose)
+    
+    return {
+        "message": f"OTP sent to {email}",
+        "status": result.get("status"),
+        "expires_in_minutes": 10,
+    }
+
+
+@auth_router.post("/verify-email-otp")
+async def verify_email_otp(email: str, otp_code: str):
+    """Verify email OTP"""
+    otp_record = await db.email_otps.find_one({"email": email}, {"_id": 0})
+    
+    if not otp_record:
+        raise HTTPException(status_code=400, detail="No OTP found. Please request a new one.")
+    
+    # Check expiry
+    expires_at = datetime.fromisoformat(otp_record["expires_at"])
+    if datetime.now(timezone.utc) > expires_at:
+        await db.email_otps.delete_one({"email": email})
+        raise HTTPException(status_code=400, detail="OTP expired. Please request a new one.")
+    
+    # Verify OTP
+    if otp_record["otp"] != otp_code:
+        raise HTTPException(status_code=400, detail="Invalid OTP code.")
+    
+    # Mark email as verified for admin if exists
+    await db.admin_users.update_one(
+        {"email": email},
+        {"$set": {"email_verified": True}}
+    )
+    
+    # Delete used OTP
+    await db.email_otps.delete_one({"email": email})
+    
+    await log_security_event(
+        "EMAIL_VERIFIED",
+        details={"email": email}
+    )
+    
+    return {"message": "Email verified successfully", "verified": True}
 
 
 @auth_router.get("/me", response_model=AdminUserResponse)
@@ -789,14 +886,18 @@ async def update_settings(
 @api_router.get("/security-logs", response_model=List[SecurityLogResponse])
 async def get_security_logs(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 25,
     event_type: Optional[str] = None,
     admin: dict = Depends(require_super_admin)
 ):
-    """Get security audit logs (Super Admin only)"""
+    """Get security audit logs (Super Admin only) with pagination"""
     query = {}
     if event_type:
         query["event_type"] = event_type
+    
+    # Apply retention policy (5 days for classic, 10 days for premium - using 10 for admin panel)
+    retention_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    query["timestamp"] = {"$gte": retention_date}
     
     logs = await db.security_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
     
@@ -812,6 +913,222 @@ async def get_security_logs(
         )
         for log in logs
     ]
+
+
+@api_router.get("/security-logs/count")
+async def get_security_logs_count(
+    event_type: Optional[str] = None,
+    admin: dict = Depends(require_super_admin)
+):
+    """Get total count of security logs for pagination"""
+    query = {}
+    if event_type:
+        query["event_type"] = event_type
+    
+    retention_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    query["timestamp"] = {"$gte": retention_date}
+    
+    total = await db.security_logs.count_documents(query)
+    return {"total": total}
+
+
+# ==================== Export Routes (Super Admin Only) ====================
+
+@export_router.get("/security-logs/csv")
+async def export_security_logs_csv(admin: dict = Depends(require_super_admin)):
+    """Export security logs as CSV (Super Admin only)"""
+    retention_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    logs = await db.security_logs.find(
+        {"timestamp": {"$gte": retention_date}}, 
+        {"_id": 0}
+    ).sort("timestamp", -1).to_list(1000)
+    
+    # Create CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Event Type", "Date", "Time", "Admin ID", "User ID", "IP Address", "Details"])
+    
+    for log in logs:
+        timestamp = datetime.fromisoformat(log["timestamp"].replace("Z", "+00:00"))
+        writer.writerow([
+            log.get("event_type", ""),
+            timestamp.strftime("%Y-%m-%d"),
+            timestamp.strftime("%H:%M:%S"),
+            log.get("admin_id", ""),
+            log.get("user_id", ""),
+            log.get("ip_address", ""),
+            json.dumps(log.get("details", {})),
+        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=security_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+@export_router.get("/intrusion-logs/csv")
+async def export_intrusion_logs_csv(admin: dict = Depends(require_super_admin)):
+    """Export intrusion/failed login logs as CSV (Super Admin only)"""
+    retention_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    logs = await db.security_logs.find(
+        {
+            "event_type": {"$in": ["LOGIN_FAILED", "TOTP_VERIFICATION_FAILED", "USER_SUSPENDED"]},
+            "timestamp": {"$gte": retention_date}
+        }, 
+        {"_id": 0}
+    ).sort("timestamp", -1).to_list(1000)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Event Type", "Date", "Time", "Email/User", "IP Address", "Details"])
+    
+    for log in logs:
+        timestamp = datetime.fromisoformat(log["timestamp"].replace("Z", "+00:00"))
+        details = log.get("details", {})
+        writer.writerow([
+            log.get("event_type", ""),
+            timestamp.strftime("%Y-%m-%d"),
+            timestamp.strftime("%H:%M:%S"),
+            details.get("email", log.get("user_id", "")),
+            log.get("ip_address", ""),
+            json.dumps(details),
+        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=intrusion_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+@export_router.get("/users/csv")
+async def export_users_csv(admin: dict = Depends(require_super_admin)):
+    """Export app users as CSV (Super Admin only)"""
+    users = await db.app_users.find({}, {"_id": 0}).to_list(10000)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["User ID", "Device ID", "Email", "Plan", "Status", "Language", "Country", 
+                     "Biometric", "Face Unlock", "Secured Apps", "Installed At", "Last Active"])
+    
+    for user in users:
+        writer.writerow([
+            user.get("id", ""),
+            user.get("device_id", ""),
+            user.get("email", ""),
+            user.get("plan", ""),
+            user.get("status", ""),
+            user.get("language", ""),
+            user.get("country", ""),
+            "Yes" if user.get("biometric_enabled") else "No",
+            "Yes" if user.get("face_unlock_enabled") else "No",
+            user.get("secured_apps_count", 0),
+            user.get("installed_at", ""),
+            user.get("last_active", ""),
+        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+# ==================== Real-Time Notifications (SSE) ====================
+
+async def broadcast_notification(notification: dict):
+    """Broadcast notification to all connected subscribers"""
+    # Store in database for persistence
+    await db.notifications.insert_one({
+        "id": f"notif-{datetime.now(timezone.utc).timestamp()}",
+        **notification,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "read": False,
+    })
+    
+    # Broadcast to SSE subscribers
+    for queue in notification_subscribers:
+        await queue.put(notification)
+
+
+@notifications_router.get("/stream")
+async def notification_stream(request: Request, admin: dict = Depends(require_super_admin)):
+    """SSE endpoint for real-time notifications (Super Admin only)"""
+    async def event_generator():
+        queue = asyncio.Queue()
+        notification_subscribers.append(queue)
+        
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                try:
+                    # Wait for notification with timeout
+                    notification = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps(notification)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+        finally:
+            notification_subscribers.remove(queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+@notifications_router.get("/")
+async def get_notifications(
+    skip: int = 0,
+    limit: int = 20,
+    unread_only: bool = False,
+    admin: dict = Depends(require_super_admin)
+):
+    """Get stored notifications (Super Admin only)"""
+    query = {}
+    if unread_only:
+        query["read"] = False
+    
+    notifications = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    unread_count = await db.notifications.count_documents({"read": False})
+    
+    return {
+        "notifications": notifications,
+        "unread_count": unread_count,
+    }
+
+
+@notifications_router.post("/mark-read")
+async def mark_notifications_read(
+    notification_ids: List[str] = None,
+    admin: dict = Depends(require_super_admin)
+):
+    """Mark notifications as read"""
+    if notification_ids:
+        await db.notifications.update_many(
+            {"id": {"$in": notification_ids}},
+            {"$set": {"read": True}}
+        )
+    else:
+        # Mark all as read
+        await db.notifications.update_many({}, {"$set": {"read": True}})
+    
+    return {"message": "Notifications marked as read"}
 
 
 # ==================== Health Check ====================
@@ -839,6 +1156,8 @@ api_router.include_router(users_router)
 api_router.include_router(analytics_router)
 api_router.include_router(feedback_router)
 api_router.include_router(settings_router)
+api_router.include_router(notifications_router)
+api_router.include_router(export_router)
 
 app.include_router(api_router)
 
