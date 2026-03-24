@@ -1,6 +1,6 @@
 {
   "timestamp": "2026-03-21T18:47:41.311001",
-  "base_url": "https://rbac-deploy-2.preview.emergentagent.com",
+  "base_url": "https://infinity-lock-admin.preview.emergentagent.com",
   "test_results": {
     "passed": [
       "\u2705 Health Check",

@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any
 
 
 class InfinityLockAPITester:
-    def __init__(self, base_url: str = "https://rbac-deploy-2.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://infinity-lock-admin.preview.emergentagent.com"):
         self.base_url = base_url
         self.session = requests.Session()
         self.access_token = None

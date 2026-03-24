@@ -440,6 +440,289 @@ async def verify_email_otp(email: str, otp_code: str):
     return {"message": "Email verified successfully", "verified": True}
 
 
+# ==================== Password Recovery Flow ====================
+
+@auth_router.post("/forgot-password/request")
+async def request_password_reset(email: str):
+    """Step 1: Request password reset - sends OTP to email"""
+    admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    
+    if not admin:
+        # Don't reveal if email exists for security
+        return {"message": "If the email exists, an OTP has been sent", "requires_totp": False}
+    
+    # Generate and store OTP
+    otp_code, expires_at = generate_email_otp()
+    
+    await db.email_otps.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "otp": otp_code,
+                "expires_at": expires_at.isoformat(),
+                "purpose": "password_reset",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        upsert=True
+    )
+    
+    # Send email via Resend
+    await send_otp_email(email, otp_code, "password_reset")
+    
+    await log_security_event(
+        "PASSWORD_RESET_REQUESTED",
+        details={"email": email}
+    )
+    
+    return {
+        "message": "If the email exists, an OTP has been sent",
+        "requires_totp": admin.get("totp_enabled", False),
+        "expires_in_minutes": 10,
+    }
+
+
+@auth_router.post("/forgot-password/verify-otp")
+async def verify_password_reset_otp(email: str, otp_code: str):
+    """Step 2: Verify OTP for password reset"""
+    otp_record = await db.email_otps.find_one(
+        {"email": email, "purpose": "password_reset"}, 
+        {"_id": 0}
+    )
+    
+    if not otp_record:
+        raise HTTPException(status_code=400, detail="No OTP found. Please request a new one.")
+    
+    # Check expiry
+    expires_at = datetime.fromisoformat(otp_record["expires_at"])
+    if datetime.now(timezone.utc) > expires_at:
+        await db.email_otps.delete_one({"email": email, "purpose": "password_reset"})
+        raise HTTPException(status_code=400, detail="OTP expired. Please request a new one.")
+    
+    # Verify OTP
+    if otp_record["otp"] != otp_code:
+        raise HTTPException(status_code=400, detail="Invalid OTP code.")
+    
+    # Check if admin requires TOTP
+    admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    
+    # Create reset token (valid for 10 minutes)
+    reset_token = create_access_token(
+        {"sub": email, "type": "password_reset", "otp_verified": True},
+        expires_delta=timedelta(minutes=10)
+    )
+    
+    return {
+        "message": "OTP verified successfully",
+        "reset_token": reset_token,
+        "requires_totp": admin.get("totp_enabled", False) if admin else False,
+    }
+
+
+@auth_router.post("/forgot-password/verify-totp")
+async def verify_password_reset_totp(email: str, totp_code: str, reset_token: str):
+    """Step 3 (if TOTP enabled): Verify TOTP for password reset"""
+    # Verify reset token
+    payload = decode_token(reset_token)
+    if not payload or payload.get("type") != "password_reset" or not payload.get("otp_verified"):
+        raise HTTPException(status_code=401, detail="Invalid or expired reset token")
+    
+    if payload.get("sub") != email:
+        raise HTTPException(status_code=401, detail="Token email mismatch")
+    
+    admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    # Verify TOTP
+    if not verify_totp(admin["totp_secret"], totp_code):
+        raise HTTPException(status_code=401, detail="Invalid TOTP code")
+    
+    # Create final reset token with TOTP verified
+    final_reset_token = create_access_token(
+        {"sub": email, "type": "password_reset", "otp_verified": True, "totp_verified": True},
+        expires_delta=timedelta(minutes=10)
+    )
+    
+    return {
+        "message": "TOTP verified successfully",
+        "reset_token": final_reset_token,
+    }
+
+
+@auth_router.post("/forgot-password/reset")
+async def reset_password(email: str, new_password: str, reset_token: str):
+    """Step 4: Reset password with verified token"""
+    # Verify reset token
+    payload = decode_token(reset_token)
+    if not payload or payload.get("type") != "password_reset" or not payload.get("otp_verified"):
+        raise HTTPException(status_code=401, detail="Invalid or expired reset token")
+    
+    if payload.get("sub") != email:
+        raise HTTPException(status_code=401, detail="Token email mismatch")
+    
+    admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    # If admin has TOTP enabled, verify TOTP was also verified
+    if admin.get("totp_enabled") and not payload.get("totp_verified"):
+        raise HTTPException(status_code=401, detail="TOTP verification required")
+    
+    # Validate new password
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    
+    # Update password
+    new_hash = hash_password(new_password)
+    await db.admin_users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "password_hash": new_hash,
+                "password_changed_at": datetime.now(timezone.utc).isoformat(),
+                "failed_attempts": 0,
+                "lockout_until": None,
+            }
+        }
+    )
+    
+    # Delete OTP record
+    await db.email_otps.delete_one({"email": email, "purpose": "password_reset"})
+    
+    await log_security_event(
+        "PASSWORD_RESET_COMPLETED",
+        admin_id=admin["id"],
+        details={"email": email, "method": "forgot_password"}
+    )
+    
+    # Send security alert email
+    await send_security_alert_email(
+        email,
+        "password_reset",
+        {"action": "Password was reset", "method": "Forgot Password Flow"}
+    )
+    
+    return {"message": "Password reset successfully"}
+
+
+# ==================== Super-Admin Email Change ====================
+
+@auth_router.post("/change-email/verify")
+async def verify_email_change(
+    new_email: str,
+    current_password: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Step 1: Verify password for email change (Super Admin only)"""
+    # Only Super Admin can change email
+    if admin.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Only Super Admin can change email")
+    
+    # Verify current password
+    if not verify_password(current_password, admin["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Validate new email format
+    import re
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, new_email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    
+    # Check if new email already exists
+    existing = await db.admin_users.find_one({"email": new_email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create temporary token for email change
+    change_token = create_access_token(
+        {
+            "sub": admin["email"],
+            "type": "email_change",
+            "new_email": new_email,
+            "password_verified": True,
+        },
+        expires_delta=timedelta(minutes=10)
+    )
+    
+    return {
+        "message": "Password verified. Please verify TOTP to complete email change.",
+        "change_token": change_token,
+        "requires_totp": admin.get("totp_enabled", False),
+    }
+
+
+@auth_router.post("/change-email/confirm")
+async def confirm_email_change(
+    totp_code: str,
+    change_token: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Step 2: Confirm email change with TOTP (Super Admin only)"""
+    # Only Super Admin can change email
+    if admin.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Only Super Admin can change email")
+    
+    # Verify change token
+    payload = decode_token(change_token)
+    if not payload or payload.get("type") != "email_change" or not payload.get("password_verified"):
+        raise HTTPException(status_code=401, detail="Invalid or expired change token")
+    
+    if payload.get("sub") != admin["email"]:
+        raise HTTPException(status_code=401, detail="Token email mismatch")
+    
+    new_email = payload.get("new_email")
+    if not new_email:
+        raise HTTPException(status_code=400, detail="New email not found in token")
+    
+    # Verify TOTP
+    if not verify_totp(admin["totp_secret"], totp_code):
+        raise HTTPException(status_code=401, detail="Invalid TOTP code")
+    
+    old_email = admin["email"]
+    
+    # Update email in database
+    await db.admin_users.update_one(
+        {"email": old_email},
+        {"$set": {"email": new_email}}
+    )
+    
+    # Update TOTP provisioning URI (email is part of the URI)
+    new_provisioning_uri = get_totp_provisioning_uri(admin["totp_secret"], new_email)
+    
+    # Log security event
+    await log_security_event(
+        "SUPER_ADMIN_EMAIL_CHANGED",
+        admin_id=admin["id"],
+        details={
+            "old_email": old_email,
+            "new_email": new_email,
+        }
+    )
+    
+    # Send security alert to both old and new email
+    await send_security_alert_email(
+        old_email,
+        "email_changed",
+        {"action": "Super Admin email was changed", "new_email": new_email}
+    )
+    await send_security_alert_email(
+        new_email,
+        "email_changed", 
+        {"action": "This email is now the Super Admin", "old_email": old_email}
+    )
+    
+    # Update SUPER_ADMIN_EMAIL in environment (for seed script reference)
+    # Note: This only affects runtime, .env file should be manually updated
+    os.environ["SUPER_ADMIN_EMAIL"] = new_email
+    
+    return {
+        "message": "Email changed successfully",
+        "new_email": new_email,
+        "note": "Please log in again with your new email",
+    }
+
+
 @auth_router.get("/me", response_model=AdminUserResponse)
 async def get_current_admin_info(admin: dict = Depends(get_current_admin)):
     """Get current admin user information"""
