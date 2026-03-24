@@ -136,6 +136,28 @@ export default function SecurityLogsPage() {
         }
     };
 
+    const handleExportPDF = async () => {
+        setExporting(true);
+        try {
+            const response = await exportAPI.downloadSecurityLogsPDF();
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `security_logs_${new Date().toISOString().slice(0,10)}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            toast.success('Security logs PDF exported successfully');
+        } catch (error) {
+            console.error('PDF export failed:', error);
+            toast.error('Failed to export PDF');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const getEventConfig = (eventType) => {
         return eventTypeConfig[eventType] || {
             label: eventType,
@@ -176,7 +198,7 @@ export default function SecurityLogsPage() {
                     <h1 className="text-2xl font-heading font-bold tracking-tight">Security Logs</h1>
                     <p className="text-slate-400">Audit trail of security events (10-day retention)</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <Button
                         variant="outline"
                         onClick={() => handleExportCSV('intrusion')}
@@ -185,7 +207,7 @@ export default function SecurityLogsPage() {
                         data-testid="export-intrusion-btn"
                     >
                         <FileDown className="w-4 h-4 mr-2" />
-                        Export Intrusion Logs
+                        Intrusion CSV
                     </Button>
                     <Button
                         variant="outline"
@@ -195,7 +217,17 @@ export default function SecurityLogsPage() {
                         data-testid="export-security-btn"
                     >
                         <Download className="w-4 h-4 mr-2" />
-                        Export All Logs
+                        All Logs CSV
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleExportPDF}
+                        disabled={exporting}
+                        className="border-white/10"
+                        data-testid="export-security-pdf-btn"
+                    >
+                        <FileText className="w-4 h-4 mr-2" />
+                        Export PDF
                     </Button>
                     <Button
                         variant="outline"

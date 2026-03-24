@@ -29,6 +29,30 @@
         --success: 160 84% 39%;
         --warning: 38 92% 50%;
     }
+
+    [data-theme="light"] {
+        --background: 0 0% 98%;
+        --foreground: 240 10% 8%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 10% 8%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 10% 8%;
+        --primary: 217 91% 50%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 5% 92%;
+        --secondary-foreground: 240 10% 10%;
+        --muted: 240 5% 92%;
+        --muted-foreground: 240 5% 40%;
+        --accent: 217 91% 50%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 84% 55%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 240 6% 85%;
+        --input: 240 6% 85%;
+        --ring: 217 91% 50%;
+        --success: 160 84% 39%;
+        --warning: 38 92% 50%;
+    }
 }
 
 * {
@@ -43,6 +67,7 @@ body {
     color: hsl(var(--foreground));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -83,6 +108,41 @@ code, .mono {
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] .glass {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Theme-aware backgrounds */
+[data-theme="light"] .bg-\[#0A0A0B\] {
+    background-color: hsl(var(--background)) !important;
+}
+
+[data-theme="light"] .bg-\[#050505\] {
+    background-color: hsl(0 0% 97%) !important;
+}
+
+[data-theme="light"] .bg-\[#050505\]\/50 {
+    background-color: hsl(0 0% 97% / 0.5) !important;
+}
+
+[data-theme="light"] .border-white\/5,
+[data-theme="light"] .border-white\/10 {
+    border-color: hsl(var(--border)) !important;
+}
+
+[data-theme="light"] .text-slate-400 {
+    color: hsl(240 5% 45%) !important;
+}
+
+[data-theme="light"] .text-slate-500 {
+    color: hsl(240 5% 50%) !important;
+}
+
+[data-theme="light"] .bg-black\/20 {
+    background-color: rgba(0, 0, 0, 0.05) !important;
 }
 
 /* Glow effects */

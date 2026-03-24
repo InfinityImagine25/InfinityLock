@@ -1,10 +1,10 @@
 /**
  * Profile/Account Page for Infinity Lock Admin Panel
- * Includes Password Change and TOTP Management
+ * Includes Password Change, TOTP Management, and Super Admin Email Change
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { authAPI } from '@/lib/api';
+import { authAPI, changeEmailAPI } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,11 +31,13 @@ import {
     AlertTriangle,
     QrCode,
     Smartphone,
+    Mail,
+    ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
-    const { user } = useAuth();
+    const { user, isSuperAdmin, logout } = useAuth();
     
     // Password change state
     const [passwordForm, setPasswordForm] = useState({
@@ -57,6 +59,16 @@ export default function ProfilePage() {
     const [enablingTotp, setEnablingTotp] = useState(false);
     const [loadingTotp, setLoadingTotp] = useState(false);
 
+    // Email change state (Super Admin)
+    const [emailForm, setEmailForm] = useState({
+        newEmail: '',
+        currentPassword: '',
+    });
+    const [emailChangeStep, setEmailChangeStep] = useState('form'); // 'form' | 'totp'
+    const [changeToken, setChangeToken] = useState('');
+    const [emailTotpCode, setEmailTotpCode] = useState('');
+    const [changingEmail, setChangingEmail] = useState(false);
+
     const handlePasswordChange = async (e) => {
         e.preventDefault();
         
@@ -64,12 +76,10 @@ export default function ProfilePage() {
             toast.error('New passwords do not match');
             return;
         }
-        
         if (passwordForm.newPassword.length < 8) {
             toast.error('Password must be at least 8 characters');
             return;
         }
-        
         if (passwordForm.currentPassword === passwordForm.newPassword) {
             toast.error('New password must be different from current password');
             return;
@@ -84,7 +94,6 @@ export default function ProfilePage() {
             toast.success('Password changed successfully');
             setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
         } catch (error) {
-            console.error('Password change failed:', error);
             const message = error.response?.data?.detail || 'Failed to change password';
             toast.error(message);
         } finally {
@@ -95,12 +104,10 @@ export default function ProfilePage() {
     const handleOpenTotpSetup = async () => {
         setLoadingTotp(true);
         setTotpDialog(true);
-        
         try {
             const response = await authAPI.getTotpSetup();
             setTotpSetup(response.data);
         } catch (error) {
-            console.error('Failed to get TOTP setup:', error);
             toast.error('Failed to load TOTP setup');
             setTotpDialog(false);
         } finally {
@@ -113,23 +120,70 @@ export default function ProfilePage() {
             toast.error('Please enter a 6-digit code');
             return;
         }
-        
         setEnablingTotp(true);
         try {
             await authAPI.enableTotp(totpCode);
             toast.success('TOTP enabled successfully');
             setTotpDialog(false);
             setTotpCode('');
-            // Refresh page to update user info
             window.location.reload();
         } catch (error) {
-            console.error('Failed to enable TOTP:', error);
             const message = error.response?.data?.detail || 'Invalid code. Please try again.';
             toast.error(message);
             setTotpCode('');
         } finally {
             setEnablingTotp(false);
         }
+    };
+
+    // Email change handlers
+    const handleEmailVerify = async (e) => {
+        e.preventDefault();
+        if (!emailForm.newEmail || !emailForm.currentPassword) {
+            toast.error('Please fill in all fields');
+            return;
+        }
+        setChangingEmail(true);
+        try {
+            const res = await changeEmailAPI.verify(emailForm.newEmail, emailForm.currentPassword);
+            setChangeToken(res.data.change_token);
+            if (res.data.requires_totp) {
+                setEmailChangeStep('totp');
+                toast.info('Verify your identity with TOTP to confirm the change');
+            } else {
+                toast.success('Email changed successfully');
+                resetEmailForm();
+            }
+        } catch (error) {
+            const message = error.response?.data?.detail || 'Failed to verify email change';
+            toast.error(message);
+        } finally {
+            setChangingEmail(false);
+        }
+    };
+
+    const handleEmailConfirm = async () => {
+        if (emailTotpCode.length !== 6) return;
+        setChangingEmail(true);
+        try {
+            await changeEmailAPI.confirm(emailTotpCode, changeToken);
+            toast.success('Email changed successfully! Please log in again.');
+            resetEmailForm();
+            setTimeout(() => logout(), 1500);
+        } catch (error) {
+            const message = error.response?.data?.detail || 'Failed to confirm email change';
+            toast.error(message);
+            setEmailTotpCode('');
+        } finally {
+            setChangingEmail(false);
+        }
+    };
+
+    const resetEmailForm = () => {
+        setEmailForm({ newEmail: '', currentPassword: '' });
+        setEmailChangeStep('form');
+        setChangeToken('');
+        setEmailTotpCode('');
     };
 
     return (
@@ -192,6 +246,96 @@ export default function ProfilePage() {
                 </CardContent>
             </Card>
 
+            {/* Change Email (Super Admin Only) */}
+            {isSuperAdmin && (
+                <Card className="bg-card/50 backdrop-blur-md border-white/5">
+                    <CardHeader className="border-b border-white/5">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Mail className="w-5 h-5 text-slate-400" />
+                            Change Super Admin Email
+                        </CardTitle>
+                        <CardDescription>
+                            Update the primary Super Admin email address. You will be logged out after the change.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                        {emailChangeStep === 'form' ? (
+                            <form onSubmit={handleEmailVerify} className="space-y-4 max-w-md">
+                                <div className="space-y-2">
+                                    <Label htmlFor="new-email">New Email Address</Label>
+                                    <Input
+                                        id="new-email"
+                                        type="email"
+                                        value={emailForm.newEmail}
+                                        onChange={(e) => setEmailForm(p => ({ ...p, newEmail: e.target.value }))}
+                                        className="bg-black/20 border-white/10"
+                                        placeholder="new-admin@example.com"
+                                        data-testid="change-email-input"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="email-password">Current Password</Label>
+                                    <Input
+                                        id="email-password"
+                                        type="password"
+                                        value={emailForm.currentPassword}
+                                        onChange={(e) => setEmailForm(p => ({ ...p, currentPassword: e.target.value }))}
+                                        className="bg-black/20 border-white/10"
+                                        placeholder="Verify your identity"
+                                        data-testid="change-email-password-input"
+                                    />
+                                </div>
+                                <Button
+                                    type="submit"
+                                    disabled={changingEmail || !emailForm.newEmail || !emailForm.currentPassword}
+                                    data-testid="change-email-verify-btn"
+                                >
+                                    {changingEmail ? (
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <ArrowRight className="w-4 h-4 mr-2" />
+                                    )}
+                                    Continue
+                                </Button>
+                            </form>
+                        ) : (
+                            <div className="space-y-4 max-w-md">
+                                <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                                    <p className="text-sm text-slate-300">
+                                        Changing email to: <span className="font-medium text-white">{emailForm.newEmail}</span>
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <Label>Enter TOTP code to confirm</Label>
+                                    <div className="flex justify-center">
+                                        <InputOTP maxLength={6} value={emailTotpCode} onChange={setEmailTotpCode} data-testid="change-email-totp-input">
+                                            <InputOTPGroup className="gap-2">
+                                                {[0,1,2,3,4,5].map((i) => (
+                                                    <InputOTPSlot key={i} index={i} className="w-10 h-12 text-lg font-mono bg-black/20 border-white/10" />
+                                                ))}
+                                            </InputOTPGroup>
+                                        </InputOTP>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <Button variant="outline" onClick={resetEmailForm} className="border-white/10">
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleEmailConfirm}
+                                        disabled={changingEmail || emailTotpCode.length !== 6}
+                                        data-testid="change-email-confirm-btn"
+                                    >
+                                        {changingEmail ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                                        Confirm Change
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Change Password */}
             <Card className="bg-card/50 backdrop-blur-md border-white/5">
                 <CardHeader className="border-b border-white/5">
@@ -205,7 +349,6 @@ export default function ProfilePage() {
                 </CardHeader>
                 <CardContent className="p-6">
                     <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
-                        {/* Current Password */}
                         <div className="space-y-2">
                             <Label htmlFor="current-password">Current Password</Label>
                             <div className="relative">
@@ -213,10 +356,7 @@ export default function ProfilePage() {
                                     id="current-password"
                                     type={showPasswords.current ? 'text' : 'password'}
                                     value={passwordForm.currentPassword}
-                                    onChange={(e) => setPasswordForm(prev => ({ 
-                                        ...prev, 
-                                        currentPassword: e.target.value 
-                                    }))}
+                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
                                     className="bg-black/20 border-white/10 pr-10"
                                     placeholder="Enter current password"
                                     data-testid="current-password-input"
@@ -226,21 +366,12 @@ export default function ProfilePage() {
                                     variant="ghost"
                                     size="icon"
                                     className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                                    onClick={() => setShowPasswords(prev => ({ 
-                                        ...prev, 
-                                        current: !prev.current 
-                                    }))}
+                                    onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
                                 >
-                                    {showPasswords.current ? (
-                                        <EyeOff className="w-4 h-4 text-slate-400" />
-                                    ) : (
-                                        <Eye className="w-4 h-4 text-slate-400" />
-                                    )}
+                                    {showPasswords.current ? <EyeOff className="w-4 h-4 text-slate-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
                                 </Button>
                             </div>
                         </div>
-                        
-                        {/* New Password */}
                         <div className="space-y-2">
                             <Label htmlFor="new-password">New Password</Label>
                             <div className="relative">
@@ -248,10 +379,7 @@ export default function ProfilePage() {
                                     id="new-password"
                                     type={showPasswords.new ? 'text' : 'password'}
                                     value={passwordForm.newPassword}
-                                    onChange={(e) => setPasswordForm(prev => ({ 
-                                        ...prev, 
-                                        newPassword: e.target.value 
-                                    }))}
+                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
                                     className="bg-black/20 border-white/10 pr-10"
                                     placeholder="Minimum 8 characters"
                                     data-testid="new-password-input"
@@ -261,21 +389,12 @@ export default function ProfilePage() {
                                     variant="ghost"
                                     size="icon"
                                     className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                                    onClick={() => setShowPasswords(prev => ({ 
-                                        ...prev, 
-                                        new: !prev.new 
-                                    }))}
+                                    onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
                                 >
-                                    {showPasswords.new ? (
-                                        <EyeOff className="w-4 h-4 text-slate-400" />
-                                    ) : (
-                                        <Eye className="w-4 h-4 text-slate-400" />
-                                    )}
+                                    {showPasswords.new ? <EyeOff className="w-4 h-4 text-slate-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
                                 </Button>
                             </div>
                         </div>
-                        
-                        {/* Confirm Password */}
                         <div className="space-y-2">
                             <Label htmlFor="confirm-password">Confirm New Password</Label>
                             <div className="relative">
@@ -283,10 +402,7 @@ export default function ProfilePage() {
                                     id="confirm-password"
                                     type={showPasswords.confirm ? 'text' : 'password'}
                                     value={passwordForm.confirmPassword}
-                                    onChange={(e) => setPasswordForm(prev => ({ 
-                                        ...prev, 
-                                        confirmPassword: e.target.value 
-                                    }))}
+                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                                     className="bg-black/20 border-white/10 pr-10"
                                     placeholder="Re-enter new password"
                                     data-testid="confirm-password-input"
@@ -296,30 +412,18 @@ export default function ProfilePage() {
                                     variant="ghost"
                                     size="icon"
                                     className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                                    onClick={() => setShowPasswords(prev => ({ 
-                                        ...prev, 
-                                        confirm: !prev.confirm 
-                                    }))}
+                                    onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
                                 >
-                                    {showPasswords.confirm ? (
-                                        <EyeOff className="w-4 h-4 text-slate-400" />
-                                    ) : (
-                                        <Eye className="w-4 h-4 text-slate-400" />
-                                    )}
+                                    {showPasswords.confirm ? <EyeOff className="w-4 h-4 text-slate-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
                                 </Button>
                             </div>
                         </div>
-                        
                         <Button 
                             type="submit" 
                             disabled={changingPassword || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
                             data-testid="change-password-btn"
                         >
-                            {changingPassword ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <Lock className="w-4 h-4 mr-2" />
-                            )}
+                            {changingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
                             Change Password
                         </Button>
                     </form>
@@ -359,7 +463,6 @@ export default function ProfilePage() {
                                     </p>
                                 </div>
                             </div>
-                            
                             <Button onClick={handleOpenTotpSetup} data-testid="setup-totp-btn">
                                 <QrCode className="w-4 h-4 mr-2" />
                                 Set Up TOTP
@@ -388,7 +491,6 @@ export default function ProfilePage() {
                         </div>
                     ) : totpSetup && (
                         <div className="space-y-6 py-4">
-                            {/* QR Code */}
                             <div className="flex justify-center">
                                 <div className="p-4 bg-white rounded-xl">
                                     <img
@@ -398,34 +500,17 @@ export default function ProfilePage() {
                                     />
                                 </div>
                             </div>
-                            
-                            {/* Manual Entry */}
                             <div className="p-3 rounded-lg bg-black/30 border border-white/10">
-                                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                                    Manual Entry Code
-                                </p>
-                                <p className="font-mono text-sm break-all select-all">
-                                    {totpSetup.secret}
-                                </p>
+                                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Manual Entry Code</p>
+                                <p className="font-mono text-sm break-all select-all">{totpSetup.secret}</p>
                             </div>
-                            
-                            {/* Verification */}
                             <div className="space-y-3">
                                 <Label>Enter the 6-digit code from your app</Label>
                                 <div className="flex justify-center">
-                                    <InputOTP
-                                        maxLength={6}
-                                        value={totpCode}
-                                        onChange={setTotpCode}
-                                        data-testid="totp-setup-input"
-                                    >
+                                    <InputOTP maxLength={6} value={totpCode} onChange={setTotpCode} data-testid="totp-setup-input">
                                         <InputOTPGroup className="gap-2">
-                                            {[0, 1, 2, 3, 4, 5].map((index) => (
-                                                <InputOTPSlot
-                                                    key={index}
-                                                    index={index}
-                                                    className="w-10 h-12 text-lg font-mono bg-black/20 border-white/10"
-                                                />
+                                            {[0,1,2,3,4,5].map((index) => (
+                                                <InputOTPSlot key={index} index={index} className="w-10 h-12 text-lg font-mono bg-black/20 border-white/10" />
                                             ))}
                                         </InputOTPGroup>
                                     </InputOTP>
@@ -435,26 +520,11 @@ export default function ProfilePage() {
                     )}
                     
                     <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setTotpDialog(false);
-                                setTotpCode('');
-                            }}
-                            className="border-white/10"
-                        >
+                        <Button variant="outline" onClick={() => { setTotpDialog(false); setTotpCode(''); }} className="border-white/10">
                             Cancel
                         </Button>
-                        <Button
-                            onClick={handleEnableTotp}
-                            disabled={enablingTotp || totpCode.length !== 6}
-                            data-testid="confirm-totp-btn"
-                        >
-                            {enablingTotp ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                            )}
+                        <Button onClick={handleEnableTotp} disabled={enablingTotp || totpCode.length !== 6} data-testid="confirm-totp-btn">
+                            {enablingTotp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                             Enable TOTP
                         </Button>
                     </DialogFooter>

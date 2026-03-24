@@ -146,6 +146,32 @@ export default function UsersPage() {
         }
     };
 
+    const handleExportPDF = async () => {
+        if (!isSuperAdmin) {
+            toast.error('Export is available for Super Admin only');
+            return;
+        }
+        setExporting(true);
+        try {
+            const response = await exportAPI.downloadUsersPDF();
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `users_${new Date().toISOString().slice(0,10)}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            toast.success('Users PDF exported successfully');
+        } catch (error) {
+            console.error('PDF export failed:', error);
+            toast.error('Failed to export PDF');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const openActionDialog = (user, action) => {
         setActionDialog({ open: true, user, action });
     };
@@ -201,16 +227,28 @@ export default function UsersPage() {
                 </div>
                 <div className="flex gap-2">
                     {isSuperAdmin && (
-                        <Button
-                            variant="outline"
-                            onClick={handleExportCSV}
-                            disabled={exporting}
-                            className="border-white/10"
-                            data-testid="export-users-btn"
-                        >
-                            <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} />
-                            Export CSV
-                        </Button>
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={handleExportCSV}
+                                disabled={exporting}
+                                className="border-white/10"
+                                data-testid="export-users-btn"
+                            >
+                                <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} />
+                                Export CSV
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleExportPDF}
+                                disabled={exporting}
+                                className="border-white/10"
+                                data-testid="export-users-pdf-btn"
+                            >
+                                <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} />
+                                Export PDF
+                            </Button>
+                        </>
                     )}
                     <Button
                         variant="outline"

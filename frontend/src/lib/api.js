@@ -64,6 +64,15 @@ export const adminAPI = {
     
     createAdmin: (data) =>
         api.post('/admin/create', data),
+    
+    updateAdmin: (adminId, data) =>
+        api.put(`/admin/${adminId}`, data),
+    
+    deleteAdmin: (adminId) =>
+        api.delete(`/admin/${adminId}`),
+    
+    resetTotp: (adminId) =>
+        api.post(`/admin/${adminId}/reset-totp`),
 };
 
 // User Management APIs
@@ -133,6 +142,12 @@ export const exportAPI = {
     
     downloadUsersCSV: () =>
         api.get('/export/users/csv', { responseType: 'blob' }),
+    
+    downloadSecurityLogsPDF: () =>
+        api.get('/export/security-logs/pdf', { responseType: 'blob' }),
+    
+    downloadUsersPDF: () =>
+        api.get('/export/users/pdf', { responseType: 'blob' }),
 };
 
 // Notifications APIs (Super Admin only)
@@ -154,6 +169,30 @@ export const otpAPI = {
     
     verifyOTP: (email, otp_code) =>
         api.post(`/auth/verify-email-otp?email=${encodeURIComponent(email)}&otp_code=${otp_code}`),
+};
+
+// Forgot Password APIs
+export const forgotPasswordAPI = {
+    requestReset: (email) =>
+        api.post(`/auth/forgot-password/request?email=${encodeURIComponent(email)}`),
+    
+    verifyOtp: (email, otp_code) =>
+        api.post(`/auth/forgot-password/verify-otp?email=${encodeURIComponent(email)}&otp_code=${otp_code}`),
+    
+    verifyTotp: (email, totp_code, reset_token) =>
+        api.post(`/auth/forgot-password/verify-totp?email=${encodeURIComponent(email)}&totp_code=${totp_code}&reset_token=${reset_token}`),
+    
+    resetPassword: (email, new_password, reset_token) =>
+        api.post(`/auth/forgot-password/reset?email=${encodeURIComponent(email)}&new_password=${encodeURIComponent(new_password)}&reset_token=${reset_token}`),
+};
+
+// Change Email APIs (Super Admin only)
+export const changeEmailAPI = {
+    verify: (new_email, current_password) =>
+        api.post(`/auth/change-email/verify?new_email=${encodeURIComponent(new_email)}&current_password=${encodeURIComponent(current_password)}`),
+    
+    confirm: (totp_code, change_token) =>
+        api.post(`/auth/change-email/confirm?totp_code=${totp_code}&change_token=${change_token}`),
 };
 
 // Health check

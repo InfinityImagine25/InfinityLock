@@ -760,6 +760,95 @@ async def list_admins(admin: dict = Depends(require_super_admin)):
     ]
 
 
+@admin_router.put("/{admin_id}")
+async def update_admin(admin_id: str, update_data: dict, current_admin: dict = Depends(require_super_admin)):
+    """Update an admin user (Super Admin only)"""
+    target = await db.admin_users.find_one({"id": admin_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    if target["role"] == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot modify Super Admin account")
+    
+    update_doc = {}
+    if "status" in update_data and update_data["status"] in ["active", "suspended", "deactivated"]:
+        update_doc["status"] = update_data["status"]
+    if "role" in update_data and update_data["role"] in ["admin"]:
+        update_doc["role"] = update_data["role"]
+    
+    if not update_doc:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    await db.admin_users.update_one({"id": admin_id}, {"$set": update_doc})
+    
+    await log_security_event(
+        "ADMIN_UPDATED",
+        admin_id=current_admin["id"],
+        details={"target_admin": admin_id, "changes": update_doc}
+    )
+    
+    updated = await db.admin_users.find_one({"id": admin_id}, {"_id": 0, "password_hash": 0, "totp_secret": 0})
+    return {
+        "message": "Admin updated successfully",
+        "admin": {
+            "id": updated["id"],
+            "email": updated["email"],
+            "role": updated["role"],
+            "status": updated["status"],
+            "totp_enabled": updated.get("totp_enabled", False),
+        }
+    }
+
+
+@admin_router.delete("/{admin_id}")
+async def delete_admin(admin_id: str, current_admin: dict = Depends(require_super_admin)):
+    """Delete an admin user (Super Admin only)"""
+    target = await db.admin_users.find_one({"id": admin_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    if target["role"] == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot delete Super Admin account")
+    
+    await db.admin_users.delete_one({"id": admin_id})
+    
+    await log_security_event(
+        "ADMIN_DELETED",
+        admin_id=current_admin["id"],
+        details={"deleted_admin_email": target["email"], "deleted_admin_id": admin_id}
+    )
+    
+    return {"message": f"Admin {target['email']} deleted successfully"}
+
+
+@admin_router.post("/{admin_id}/reset-totp")
+async def reset_admin_totp(admin_id: str, current_admin: dict = Depends(require_super_admin)):
+    """Reset TOTP for an admin who lost their authenticator (Super Admin only)"""
+    target = await db.admin_users.find_one({"id": admin_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    if target["role"] == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot reset Super Admin TOTP through this endpoint")
+    
+    new_secret = generate_totp_secret()
+    await db.admin_users.update_one(
+        {"id": admin_id},
+        {"$set": {"totp_secret": new_secret, "totp_enabled": False}}
+    )
+    
+    await log_security_event(
+        "TOTP_RESET",
+        admin_id=current_admin["id"],
+        details={"target_admin": admin_id, "target_email": target["email"]}
+    )
+    
+    return {
+        "message": f"TOTP reset for {target['email']}. They will need to set up TOTP again on next login.",
+        "email": target["email"],
+    }
+
+
 @admin_router.post("/create", response_model=AdminUserResponse)
 async def create_admin(admin_data: AdminUserCreate, current_admin: dict = Depends(require_super_admin)):
     """Create a new admin user (Super Admin only)"""
@@ -1321,6 +1410,117 @@ async def export_users_csv(admin: dict = Depends(require_super_admin)):
         iter([output.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+
+@export_router.get("/security-logs/pdf")
+async def export_security_logs_pdf(admin: dict = Depends(require_super_admin)):
+    """Export security logs as PDF (Super Admin only)"""
+    from fpdf import FPDF
+    
+    retention_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    logs = await db.security_logs.find(
+        {"timestamp": {"$gte": retention_date}}, {"_id": 0}
+    ).sort("timestamp", -1).to_list(1000)
+    
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page(orientation='L')
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Infinity Lock - Security Logs Report", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", ln=True, align="C")
+    pdf.ln(5)
+    
+    headers = ["Event Type", "Date", "Time", "Admin ID", "IP Address", "Details"]
+    col_widths = [45, 25, 20, 55, 35, 97]
+    
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_fill_color(30, 30, 35)
+    pdf.set_text_color(200, 200, 220)
+    for i, h in enumerate(headers):
+        pdf.cell(col_widths[i], 7, h, border=1, fill=True)
+    pdf.ln()
+    
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(60, 60, 70)
+    for log in logs:
+        ts = log.get("timestamp", "")
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            date_str = dt.strftime("%Y-%m-%d")
+            time_str = dt.strftime("%H:%M:%S")
+        except Exception:
+            date_str = time_str = ""
+        
+        details = json.dumps(log.get("details", {}))[:50]
+        row = [
+            log.get("event_type", "")[:20],
+            date_str, time_str,
+            (log.get("admin_id") or "")[:25],
+            (log.get("ip_address") or ""),
+            details,
+        ]
+        for i, val in enumerate(row):
+            pdf.cell(col_widths[i], 6, str(val), border=1)
+        pdf.ln()
+    
+    pdf_bytes = pdf.output()
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=security_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"}
+    )
+
+
+@export_router.get("/users/pdf")
+async def export_users_pdf(admin: dict = Depends(require_super_admin)):
+    """Export app users as PDF (Super Admin only)"""
+    from fpdf import FPDF
+    
+    users = await db.app_users.find({}, {"_id": 0}).to_list(10000)
+    
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page(orientation='L')
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Infinity Lock - Users Report", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} | Total: {len(users)}", ln=True, align="C")
+    pdf.ln(5)
+    
+    headers = ["Email", "Plan", "Status", "Language", "Country", "Biometric", "Apps", "Installed"]
+    col_widths = [55, 25, 25, 25, 30, 25, 20, 72]
+    
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_fill_color(30, 30, 35)
+    pdf.set_text_color(200, 200, 220)
+    for i, h in enumerate(headers):
+        pdf.cell(col_widths[i], 7, h, border=1, fill=True)
+    pdf.ln()
+    
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(60, 60, 70)
+    for u in users:
+        row = [
+            (u.get("email") or u.get("device_id", ""))[:25],
+            u.get("plan", ""),
+            u.get("status", ""),
+            u.get("language", ""),
+            (u.get("country") or "")[:15],
+            "Yes" if u.get("biometric_enabled") else "No",
+            str(u.get("secured_apps_count", 0)),
+            u.get("installed_at", "")[:25],
+        ]
+        for i, val in enumerate(row):
+            pdf.cell(col_widths[i], 6, str(val), border=1)
+        pdf.ln()
+    
+    pdf_bytes = pdf.output()
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"}
     )
 
 
