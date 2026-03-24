@@ -681,14 +681,18 @@ async def confirm_email_change(
     
     old_email = admin["email"]
     
-    # Update email in database
+    # Reset TOTP - generate new secret and disable TOTP
+    new_totp_secret = generate_totp_secret()
+    
+    # Update email and reset TOTP in database
     await db.admin_users.update_one(
         {"email": old_email},
-        {"$set": {"email": new_email}}
+        {"$set": {
+            "email": new_email,
+            "totp_secret": new_totp_secret,
+            "totp_enabled": False,
+        }}
     )
-    
-    # Update TOTP provisioning URI (email is part of the URI)
-    new_provisioning_uri = get_totp_provisioning_uri(admin["totp_secret"], new_email)
     
     # Log security event
     await log_security_event(
@@ -697,6 +701,7 @@ async def confirm_email_change(
         details={
             "old_email": old_email,
             "new_email": new_email,
+            "totp_reset": True,
         }
     )
     
@@ -717,9 +722,10 @@ async def confirm_email_change(
     os.environ["SUPER_ADMIN_EMAIL"] = new_email
     
     return {
-        "message": "Email changed successfully",
+        "message": "Email changed successfully. TOTP has been reset — you will need to set up TOTP again on next login.",
         "new_email": new_email,
-        "note": "Please log in again with your new email",
+        "totp_reset": True,
+        "note": "Please log in again with your new email and set up TOTP",
     }
 
 

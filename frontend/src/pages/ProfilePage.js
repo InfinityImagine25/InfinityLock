@@ -167,7 +167,7 @@ export default function ProfilePage() {
         setChangingEmail(true);
         try {
             await changeEmailAPI.confirm(emailTotpCode, changeToken);
-            toast.success('Email changed successfully! Please log in again.');
+            toast.success('Email changed! TOTP has been reset. Please log in again and set up TOTP.');
             resetEmailForm();
             setTimeout(() => logout(), 1500);
         } catch (error) {

@@ -67,8 +67,8 @@ export default function AdminLayout() {
             {/* Logo */}
             <div className="p-4 border-b border-white/5">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                        <Shield className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0">
+                        <img src="/infinity-lock-icon.png" alt="Infinity Lock" className="w-full h-full object-cover" />
                     </div>
                     {!collapsed && (
                         <div className="overflow-hidden">
@@ -229,7 +229,7 @@ export default function AdminLayout() {
                         <Menu className="w-5 h-5" />
                     </Button>
                     <div className="flex items-center gap-2">
-                        <Shield className="w-5 h-5 text-primary" />
+                        <img src="/infinity-lock-icon.png" alt="Infinity Lock" className="w-6 h-6 rounded" />
                         <span className="font-heading font-bold text-sm">INFINITY LOCK</span>
                     </div>
                     <div className="flex items-center gap-1">

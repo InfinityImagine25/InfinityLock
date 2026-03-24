@@ -423,8 +423,8 @@ export default function LoginPage() {
                 </div>
                 <div className="relative z-10 flex flex-col justify-center items-center w-full p-12">
                     <div className="glass rounded-2xl p-8 max-w-md text-center">
-                        <div className="w-20 h-20 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-6">
-                            <Shield className="w-10 h-10 text-primary" />
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden mx-auto mb-6">
+                            <img src="/infinity-lock-icon.png" alt="Infinity Lock" className="w-full h-full object-cover" />
                         </div>
                         <h1 className="font-heading text-3xl font-bold text-white mb-4 tracking-tight">
                             INFINITY LOCK
@@ -446,8 +446,8 @@ export default function LoginPage() {
                 <div className="w-full max-w-md">
                     {/* Mobile Logo */}
                     <div className="lg:hidden text-center mb-8">
-                        <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                            <Shield className="w-8 h-8 text-primary" />
+                        <div className="w-16 h-16 rounded-xl overflow-hidden mx-auto mb-4">
+                            <img src="/infinity-lock-icon.png" alt="Infinity Lock" className="w-full h-full object-cover" />
                         </div>
                         <h1 className="font-heading text-2xl font-bold tracking-tight">INFINITY LOCK</h1>
                     </div>
@@ -525,8 +525,8 @@ export default function LoginPage() {
                         ) : step === 'totp' ? (
                             <>
                                 <div className="text-center mb-8">
-                                    <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                                        <Shield className="w-8 h-8 text-primary" />
+                                    <div className="w-16 h-16 rounded-xl overflow-hidden mx-auto mb-4">
+                                        <img src="/infinity-lock-icon.png" alt="Infinity Lock" className="w-full h-full object-cover" />
                                     </div>
                                     <h2 className="font-heading text-2xl font-bold mb-2">Two-Factor Authentication</h2>
                                     <p className="text-slate-400">Enter the 6-digit code from your authenticator app</p>
