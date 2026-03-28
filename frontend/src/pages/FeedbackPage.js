@@ -71,7 +71,7 @@ export default function FeedbackPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [activetab]);
+    }, [activeTab]);
 
     useEffect(() => {
         fetchData();
