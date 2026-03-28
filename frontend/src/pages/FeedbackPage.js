@@ -75,7 +75,7 @@ export default function FeedbackPage() {
 
     useEffect(() => {
         fetchData();
-    }, [activeTab]);
+    }, [activeTab, fetchData]);
 
     const handleRefresh = () => {
         setRefreshing(true);
