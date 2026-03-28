@@ -1,7 +1,7 @@
 /**
  * Feedback Management Page for Infinity Lock Admin Panel
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { feedbackAPI } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,7 +55,7 @@ export default function FeedbackPage() {
     });
     const [responding, setResponding] = useState(false);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             const params = activeTab !== 'all' ? { status: activeTab } : {};
             const [feedbackRes, statsRes] = await Promise.all([
@@ -71,7 +71,7 @@ export default function FeedbackPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [activetab]);
 
     useEffect(() => {
         fetchData();
